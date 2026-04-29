@@ -4,7 +4,7 @@ import { MapPin, Upload } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { toast } from "sonner";
 
 export function Login() {
@@ -12,7 +12,11 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [idPhoto, setIdPhoto] = useState<File | null>(null);
+  // Controlled modal — the previous DialogTrigger pattern was uncontrolled,
+  // so calling setIdModalOpen(false) on submit had no effect and the modal
+  // stayed open over the success toast.
   const [idModalOpen, setIdModalOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,16 +26,17 @@ export function Login() {
     }
   };
 
-  const handleIDVerification = () => {
-    if (idPhoto) {
-      setIdModalOpen(false);
-      setTimeout(() => {
-        toast.success("✓ ID Verified successfully!");
-      }, 300);
-      setIdPhoto(null);
-    } else {
+  const handleIDVerification = async () => {
+    if (!idPhoto) {
       toast.error("Please upload an ID photo");
+      return;
     }
+    setVerifying(true);
+    await new Promise((r) => setTimeout(r, 600));
+    setVerifying(false);
+    setIdModalOpen(false);
+    setIdPhoto(null);
+    toast.success("✓ ID Verified successfully!");
   };
 
   return (
@@ -85,13 +90,22 @@ export function Login() {
         </form>
 
         <div className="mt-6 space-y-3">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full border-[#1976D2] text-[#1976D2]">
-                <Upload className="w-4 h-4 mr-2" />
-                Verify ID/DOB
-              </Button>
-            </DialogTrigger>
+          <Button
+            variant="outline"
+            className="w-full border-[#1976D2] text-[#1976D2]"
+            onClick={() => setIdModalOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Verify ID/DOB
+          </Button>
+          <Dialog
+            open={idModalOpen}
+            onOpenChange={(next) => {
+              if (verifying) return;
+              setIdModalOpen(next);
+              if (!next) setIdPhoto(null);
+            }}
+          >
             <DialogContent className="max-w-[340px]">
               <DialogHeader>
                 <DialogTitle>Verify Identity</DialogTitle>
@@ -118,8 +132,9 @@ export function Login() {
                 <Button
                   className="w-full bg-[#1976D2] hover:bg-[#1565C0]"
                   onClick={handleIDVerification}
+                  disabled={!idPhoto || verifying}
                 >
-                  Submit for Verification
+                  {verifying ? "Verifying…" : "Submit for Verification"}
                 </Button>
               </div>
             </DialogContent>

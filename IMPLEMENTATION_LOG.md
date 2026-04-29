@@ -305,3 +305,84 @@ because a solution was edited) while the carousel is open.
   "empty → null".
 
 Test count went from 32 to 36, all green.
+
+---
+
+## Feature polish (round 3)
+
+### 1. Global "Current Area" location dropdown
+
+**Why a dropdown lives in the store, not in props.** Several screens
+(Dashboard map, Dashboard "My Reports" list, Notification overlay,
+Profile) need to react to the same filter. Threading a prop through
+every navigation step is fragile; a single store key keeps the
+selection and any reactor automatically synchronised. The new field
+is `selectedDistrict: LocationFilter`, defaulting to `"All Locations"`,
+plus a `setSelectedDistrict` action.
+
+**Why a derived district instead of a Prisma column.** The brief
+asked us not to touch unrelated API logic. Adding a `district` column
+would have meant a schema migration, a re-seed, and a new test for
+data-layer round-tripping. Instead `src/lib/districts.ts` derives
+the district from the existing `address` string with a small list of
+case-insensitive regexes. Adding new neighbourhoods is one regex
+entry, not a migration.
+
+**Where the dropdown lives.** `LocationDropdown` is a single
+component with a `header` and `panel` variant:
+- Dashboard renders the header variant in the blue top bar so a
+  citizen on the map can switch context without scrolling away.
+- Profile renders the panel variant inside the body, framed with a
+  short caption so the user understands the dropdown's reach.
+
+**What it filters.** `DashboardMap` and Dashboard's "My Reports"
+list use `matchesFilter(address, selectedDistrict)`. The
+`NotificationOverlay`'s `pickNearbyReport` now also takes the
+filter — if a user has hidden Dasoudi, the proximity prompt
+should not surface a Dasoudi issue and break the mental model.
+
+**Persistence.** `selectedDistrict` was added to the persist
+`partialize` set. A returning user lands on the same district
+they last picked, on every device that can read their
+localStorage.
+
+### 2. Verification modal UX
+
+Both the Login "Verify ID/DOB" modal and the Profile "Re-upload
+ID" modal were uncontrolled `<Dialog>` components: they relied on
+`<DialogTrigger>` for the open transition, but the success
+handlers tried to close them via local `useState` calls that
+Radix simply ignored. The visible bug was that the modal sat
+open over the success toast.
+
+The fix:
+- Both dialogs are now controlled (`open` / `onOpenChange`).
+- The trigger is a plain `Button` whose `onClick` flips the
+  state, so we no longer rely on Radix's built-in
+  trigger semantics and we can rule out timing glitches.
+- The submit handler runs a small awaited delay (≈600ms) to
+  simulate verification, then in order: clears verifying state,
+  closes the modal, clears the staged file, fires the toast.
+- During verification, both `disabled` on the button and an
+  early-return in `onOpenChange` stop the user from dismissing
+  the modal mid-submit, which was a small UX hole that would
+  otherwise let them double-submit.
+- The submit button label switches to "Verifying…" while the
+  await is in flight, so the brief delay doesn't read as a
+  no-op tap.
+
+### 3. Tests reflecting the changes
+
+- New `districts.test.ts` (6 cases) covering the address →
+  district mapping, the `LOCATION_OPTIONS` ordering invariant
+  (All Locations first), the case-insensitive matching, and
+  the `Other` fallback for unmatched addresses.
+- New store cases for `selectedDistrict`: default value,
+  `setSelectedDistrict` synchronous update, and a partialize
+  introspection check that catches the regression where
+  someone removes the field from the persist payload.
+- New `pickNearbyReport` cases: respects an active district
+  filter, and returns `null` when the filter eliminates the
+  candidate set entirely.
+
+Test count now 47 (was 36), all green.

@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { useAppStore } from "../store/appStore";
 import { haversineKm } from "@/lib/geo";
+import { matchesFilter, type LocationFilter } from "@/lib/districts";
 
 interface NotificationOverlayProps {
   open: boolean;
@@ -12,11 +13,17 @@ interface NotificationOverlayProps {
 
 // Picks the closest pending report to the user's last known location, so the
 // "Nearby Issue" toast actually corresponds to a real, navigable issue.
+// When a district filter is active the candidate set is narrowed first —
+// otherwise the overlay would tease the user with an issue from a
+// neighbourhood they've explicitly hidden.
 export function pickNearbyReport(
   reports: ReturnType<typeof useAppStore.getState>["reports"],
   origin: { lat: number; lng: number } | undefined,
+  districtFilter: LocationFilter = "All Locations",
 ) {
-  const candidates = reports.filter((r) => r.status === "pending");
+  const candidates = reports
+    .filter((r) => r.status === "pending")
+    .filter((r) => matchesFilter(r.address, districtFilter));
   if (candidates.length === 0) return null;
   if (!origin) return candidates[0];
   let best = candidates[0];
@@ -35,7 +42,8 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
   const navigate = useNavigate();
   const reports = useAppStore((s) => s.reports);
   const me = useAppStore((s) => s.getCurrentUser());
-  const picked = pickNearbyReport(reports, me.location);
+  const selectedDistrict = useAppStore((s) => s.selectedDistrict);
+  const picked = pickNearbyReport(reports, me.location, selectedDistrict);
   const report = picked && "report" in picked ? picked.report : picked;
   const distanceKm = picked && "distanceKm" in picked ? picked.distanceKm : null;
 

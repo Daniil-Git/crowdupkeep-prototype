@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { Badge } from "./ui/badge";
 import { useAppStore, LIMASSOL_CENTER } from "../store/appStore";
+import { matchesFilter } from "@/lib/districts";
 import { icon as leafletIcon } from "leaflet";
 
 const buildIcon = (color: "red" | "green" | "orange" | "blue") =>
@@ -23,6 +25,12 @@ const ICONS = {
 export function DashboardMap() {
   const navigate = useNavigate();
   const reports = useAppStore((s) => s.reports);
+  const selectedDistrict = useAppStore((s) => s.selectedDistrict);
+
+  const visible = useMemo(
+    () => reports.filter((r) => matchesFilter(r.address, selectedDistrict)),
+    [reports, selectedDistrict],
+  );
 
   return (
     <MapContainer
@@ -37,7 +45,7 @@ export function DashboardMap() {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       />
-      {reports.map((report) => (
+      {visible.map((report) => (
         <Marker
           key={`marker-${report.id}`}
           position={[report.geometry.lat, report.geometry.lng]}

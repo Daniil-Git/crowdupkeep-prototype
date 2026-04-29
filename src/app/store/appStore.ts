@@ -2,6 +2,7 @@ import { create, type StateCreator } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { xpFor } from "@/lib/xp";
 import type { LatLng } from "@/lib/geo";
+import { ALL_LOCATIONS, type LocationFilter } from "@/lib/districts";
 import { LIMASSOL_CENTER, seedReports, seedRewards, seedUsers } from "../data/mockData";
 
 // In-browser state mirrors the Prisma schema closely so swapping the runtime
@@ -78,6 +79,11 @@ interface AppState {
   redeemedVouchers: RedeemedVoucher[];
   bannedUsernames: string[];
 
+  // global UI filter — the "Current Area" dropdown. Persisted so a
+  // returning user keeps their last context.
+  selectedDistrict: LocationFilter;
+  setSelectedDistrict: (filter: LocationFilter) => void;
+
   // user
   getCurrentUser: () => UiUser;
   bumpStreak: () => void;
@@ -142,6 +148,9 @@ const stateCreator: StateCreator<AppState> = (set, get) => ({
   rewards: seedRewards,
   redeemedVouchers: initialRedeemedVouchers,
   bannedUsernames: [],
+  selectedDistrict: ALL_LOCATIONS,
+
+  setSelectedDistrict: (filter) => set({ selectedDistrict: filter }),
 
   getCurrentUser: () => {
     const { users, currentUserId } = get();
@@ -323,6 +332,7 @@ export const useAppStore = create<AppState>()(
       rewards: state.rewards,
       redeemedVouchers: state.redeemedVouchers,
       bannedUsernames: state.bannedUsernames,
+      selectedDistrict: state.selectedDistrict,
     }),
   }),
 );

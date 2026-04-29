@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Plus, Trophy, User, Flame, Clock } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -6,12 +6,15 @@ import { Badge } from "./ui/badge";
 import { NewReportModal } from "./NewReportModal";
 import { NotificationOverlay } from "./NotificationOverlay";
 import { DashboardMap } from "./DashboardMap";
+import { LocationDropdown } from "./LocationDropdown";
 import { useAppStore } from "../store/appStore";
+import { matchesFilter } from "@/lib/districts";
 
 export function Dashboard() {
   const navigate = useNavigate();
   const reports = useAppStore((s) => s.reports);
   const me = useAppStore((s) => s.getCurrentUser());
+  const selectedDistrict = useAppStore((s) => s.selectedDistrict);
   const [showNewReport, setShowNewReport] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
 
@@ -20,13 +23,22 @@ export function Dashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  const myReports = reports.filter((r) => r.createdById === me.id);
+  // The district filter intentionally only narrows "My Reports" too — when
+  // the user picks "Molos" they expect to see only their Molos issues
+  // alongside the filtered map. "All Locations" is the no-op default.
+  const myReports = useMemo(
+    () =>
+      reports
+        .filter((r) => r.createdById === me.id)
+        .filter((r) => matchesFilter(r.address, selectedDistrict)),
+    [reports, me.id, selectedDistrict],
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <div className="bg-[#1976D2] text-white px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div
               className="cursor-pointer bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center gap-2"
               onClick={() => navigate("/rewards")}
@@ -39,7 +51,13 @@ export function Dashboard() {
               <span className="text-sm">{me.streak} day streak</span>
             </div>
           </div>
-          <User className="w-6 h-6 cursor-pointer" onClick={() => navigate("/profile")} />
+          <User
+            className="w-6 h-6 cursor-pointer flex-shrink-0"
+            onClick={() => navigate("/profile")}
+          />
+        </div>
+        <div className="mt-2">
+          <LocationDropdown variant="header" className="w-full" />
         </div>
       </div>
 
@@ -54,10 +72,6 @@ export function Dashboard() {
         </TabsList>
 
         <TabsContent value="map" className="m-0 flex flex-col">
-          {/* Fixed-height map container so the page itself can scroll
-              naturally when the My Reports list grows. The previous
-              flex-1 + max-h overflow-y-auto pattern produced a nested
-              scrollbar inside the iPhone frame. */}
           <div className="relative isolate z-0 h-[55vh] overflow-hidden">
             <DashboardMap />
             <button
@@ -72,7 +86,9 @@ export function Dashboard() {
           <div className="border-t bg-white p-4">
             <h3 className="mb-3">My Reports</h3>
             {myReports.length === 0 ? (
-              <p className="text-sm text-gray-500">No reports yet — tap + to add one.</p>
+              <p className="text-sm text-gray-500">
+                No reports yet for this area — tap + to add one.
+              </p>
             ) : (
               <div className="space-y-2">
                 {myReports.map((report) => (

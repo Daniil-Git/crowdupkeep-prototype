@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { useAppStore } from "@/app/store/appStore";
 import { pickNearbyReport } from "@/app/components/NotificationOverlay";
+import { ALL_LOCATIONS } from "@/lib/districts";
 
 // The Zustand store is the in-memory mirror of the persistent layer. Reset it
 // between cases so each test sees a fresh seed. With persist middleware
@@ -110,6 +111,30 @@ describe("useAppStore", () => {
     expect(typeof useAppStore.persist.onFinishHydration).toBe("function");
     expect(typeof useAppStore.persist.clearStorage).toBe("function");
   });
+
+  it("defaults selectedDistrict to All Locations", () => {
+    expect(useAppStore.getState().selectedDistrict).toBe(ALL_LOCATIONS);
+  });
+
+  it("setSelectedDistrict updates the store synchronously", () => {
+    useAppStore.getState().setSelectedDistrict("Molos");
+    expect(useAppStore.getState().selectedDistrict).toBe("Molos");
+    useAppStore.getState().setSelectedDistrict("Old Port");
+    expect(useAppStore.getState().selectedDistrict).toBe("Old Port");
+  });
+
+  it("includes selectedDistrict in the persisted partition", () => {
+    // The partialize config decides what survives a refresh. Without the
+    // district being persisted, the user would lose their filter on every
+    // reload — exactly the regression we just fixed.
+    useAppStore.getState().setSelectedDistrict("Dasoudi");
+    const persistOptions = (useAppStore.persist as unknown as {
+      getOptions: () => { partialize?: (s: unknown) => Record<string, unknown> };
+    }).getOptions();
+    const partial = persistOptions.partialize?.(useAppStore.getState());
+    expect(partial).toBeDefined();
+    expect(partial!.selectedDistrict).toBe("Dasoudi");
+  });
 });
 
 describe("pickNearbyReport (NotificationOverlay)", () => {
@@ -138,6 +163,29 @@ describe("pickNearbyReport (NotificationOverlay)", () => {
 
   it("returns null when there are no pending reports", () => {
     const picked = pickNearbyReport([], { lat: 0, lng: 0 });
+    expect(picked).toBeNull();
+  });
+
+  it("respects the active district filter when picking nearby", () => {
+    const here = { lat: 34.7071, lng: 33.0226 };
+    const reports = useAppStore.getState().reports;
+    const picked = pickNearbyReport(reports, here, "Old Port");
+    if (!picked || !("report" in picked)) {
+      throw new Error("expected an Old Port report");
+    }
+    expect(picked.report.address.toLowerCase()).toContain("old port");
+  });
+
+  it("returns null when the active district filter excludes every pending report", () => {
+    const here = { lat: 34.7071, lng: 33.0226 };
+    // Force every seeded report into a status that won't match the picker's
+    // 'pending' constraint, so we exercise the empty-candidates branch even
+    // when a district filter is supplied.
+    const reports = useAppStore.getState().reports.map((r) => ({
+      ...r,
+      status: "solved" as const,
+    }));
+    const picked = pickNearbyReport(reports, here, "Old Port");
     expect(picked).toBeNull();
   });
 });

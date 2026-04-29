@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Upload, Trophy, CheckCircle, Gift, TrendingUp } from "lucide-react";
+import { ArrowLeft, Upload, Trophy, CheckCircle, Gift, TrendingUp, MapPin } from "lucide-react";
 import { Button } from "./ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Badge } from "./ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
 import { useAppStore } from "../store/appStore";
+import { LocationDropdown } from "./LocationDropdown";
+import { matchesFilter } from "@/lib/districts";
 
 // Synthetic XP curve trailing the user's current balance — keeps the chart
 // meaningful as the live XP changes from accepted solutions.
@@ -29,19 +31,33 @@ export function Profile() {
   const me = useAppStore((s) => s.getCurrentUser());
   const reports = useAppStore((s) => s.reports);
   const redeemedVouchers = useAppStore((s) => s.redeemedVouchers);
+  const selectedDistrict = useAppStore((s) => s.selectedDistrict);
   const [idPhoto, setIdPhoto] = useState<File | null>(null);
+  // The Re-upload modal is controlled so the success handler can close it
+  // explicitly. The previous uncontrolled DialogTrigger pattern left the
+  // modal open after a successful submit, contradicting the toast.
+  const [reuploadOpen, setReuploadOpen] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const myReports = useMemo(
-    () => reports.filter((r) => r.createdById === me.id),
-    [reports, me.id],
+    () =>
+      reports
+        .filter((r) => r.createdById === me.id)
+        .filter((r) => matchesFilter(r.address, selectedDistrict)),
+    [reports, me.id, selectedDistrict],
   );
   const xpHistory = useMemo(() => buildXpHistory(me.xp), [me.xp]);
 
-  const handleReuploadID = () => {
-    if (idPhoto) {
-      toast.success("ID re-uploaded successfully!");
-      setIdPhoto(null);
-    }
+  const handleReuploadID = async () => {
+    if (!idPhoto || verifying) return;
+    setVerifying(true);
+    // Simulated verification — short delay so the user perceives the
+    // submit as a deliberate action rather than an instant flash.
+    await new Promise((r) => setTimeout(r, 600));
+    setVerifying(false);
+    setReuploadOpen(false);
+    setIdPhoto(null);
+    toast.success("ID re-uploaded and verified!");
   };
 
   return (
@@ -78,6 +94,17 @@ export function Profile() {
       </div>
 
       <div className="px-4 py-6 space-y-6">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin className="w-5 h-5 text-[#1976D2]" />
+            <h3>Current Area</h3>
+          </div>
+          <LocationDropdown />
+          <p className="text-xs text-gray-500 mt-2">
+            Filters the dashboard map and nearby-issue alerts.
+          </p>
+        </div>
+
         <div>
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-5 h-5 text-[#4CAF50]" />
@@ -167,13 +194,22 @@ export function Profile() {
         </div>
 
         <div>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full border-[#1976D2] text-[#1976D2]">
-                <Upload className="w-4 h-4 mr-2" />
-                Re-upload ID
-              </Button>
-            </DialogTrigger>
+          <Button
+            variant="outline"
+            className="w-full border-[#1976D2] text-[#1976D2]"
+            onClick={() => setReuploadOpen(true)}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Re-upload ID
+          </Button>
+          <Dialog
+            open={reuploadOpen}
+            onOpenChange={(next) => {
+              if (verifying) return; // don't allow closing mid-verification
+              setReuploadOpen(next);
+              if (!next) setIdPhoto(null);
+            }}
+          >
             <DialogContent className="max-w-[340px]">
               <DialogHeader>
                 <DialogTitle>Re-upload Identity Document</DialogTitle>
@@ -200,9 +236,9 @@ export function Profile() {
                 <Button
                   className="w-full bg-[#1976D2] hover:bg-[#1565C0]"
                   onClick={handleReuploadID}
-                  disabled={!idPhoto}
+                  disabled={!idPhoto || verifying}
                 >
-                  Submit for Verification
+                  {verifying ? "Verifying…" : "Submit for Verification"}
                 </Button>
               </div>
             </DialogContent>
