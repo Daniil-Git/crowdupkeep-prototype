@@ -1,35 +1,41 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Upload, Trophy, CheckCircle, Gift, TrendingUp } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { Badge } from "./ui/badge";
-import { currentUser } from "../data/mockData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
-import { useApp } from "../context/AppContext";
+import { useAppStore } from "../store/appStore";
 
-const xpHistory = [
-  { date: "Mar 9", xp: 800 },
-  { date: "Mar 10", xp: 900 },
-  { date: "Mar 11", xp: 950 },
-  { date: "Mar 12", xp: 1050 },
-  { date: "Mar 13", xp: 1100 },
-  { date: "Mar 14", xp: 1150 },
-  { date: "Mar 15", xp: 1200 },
-  { date: "Mar 16", xp: 1250 },
-];
-
-const redeemedVouchers = [
-  { id: 1, title: "Coffee Shop €25", date: "2026-03-10", code: "CUK-CF25-9821" },
-  { id: 2, title: "Cinema Tickets (2x)", date: "2026-03-05", code: "CUK-CN2X-4563" },
-];
+// Synthetic XP curve trailing the user's current balance — keeps the chart
+// meaningful as the live XP changes from accepted solutions.
+function buildXpHistory(currentXp: number) {
+  const days = 8;
+  const start = Math.max(0, currentXp - 450);
+  const step = (currentXp - start) / (days - 1);
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1 - i));
+    return {
+      date: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      xp: Math.round(start + step * i),
+    };
+  });
+}
 
 export function Profile() {
   const navigate = useNavigate();
+  const me = useAppStore((s) => s.getCurrentUser());
+  const reports = useAppStore((s) => s.reports);
+  const redeemedVouchers = useAppStore((s) => s.redeemedVouchers);
   const [idPhoto, setIdPhoto] = useState<File | null>(null);
 
-  const myReports = useApp().reports.filter((r) => r.createdBy === "you");
+  const myReports = useMemo(
+    () => reports.filter((r) => r.createdById === me.id),
+    [reports, me.id],
+  );
+  const xpHistory = useMemo(() => buildXpHistory(me.xp), [me.xp]);
 
   const handleReuploadID = () => {
     if (idPhoto) {
@@ -40,26 +46,24 @@ export function Profile() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <div className="bg-[#1976D2] text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/dashboard")}>
+        <button onClick={() => navigate("/dashboard")} aria-label="Back">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg">Profile</h1>
       </div>
 
-      {/* Profile Info */}
       <div className="bg-gradient-to-br from-[#1976D2] to-[#1565C0] px-4 py-8 text-white text-center">
         <img
-          src={currentUser.avatar}
-          alt={currentUser.username}
+          src={me.avatar}
+          alt={me.username}
           className="w-24 h-24 rounded-full mx-auto mb-3 border-4 border-white/50"
         />
-        <h2 className="text-2xl mb-1">{currentUser.username}</h2>
-        <p className="text-white/90 text-sm">Rank #{currentUser.rank} • {currentUser.streak} day streak</p>
+        <h2 className="text-2xl mb-1">{me.username}</h2>
+        <p className="text-white/90 text-sm">{me.streak} day streak</p>
         <div className="flex justify-center gap-6 mt-4">
           <div>
-            <p className="text-2xl">{currentUser.xp}</p>
+            <p className="text-2xl">{me.xp}</p>
             <p className="text-xs text-white/80">Total XP</p>
           </div>
           <div>
@@ -74,7 +78,6 @@ export function Profile() {
       </div>
 
       <div className="px-4 py-6 space-y-6">
-        {/* XP History Graph */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="w-5 h-5 text-[#4CAF50]" />
@@ -93,7 +96,6 @@ export function Profile() {
           </div>
         </div>
 
-        {/* My Reports */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Trophy className="w-5 h-5 text-[#FF9800]" />
@@ -119,8 +121,8 @@ export function Profile() {
                         report.status === "solved"
                           ? "default"
                           : report.status === "in-progress"
-                          ? "secondary"
-                          : "destructive"
+                            ? "secondary"
+                            : "destructive"
                       }
                       className="text-xs"
                     >
@@ -136,7 +138,6 @@ export function Profile() {
           </div>
         </div>
 
-        {/* Redeemed Vouchers */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Gift className="w-5 h-5 text-[#4CAF50]" />
@@ -144,12 +145,15 @@ export function Profile() {
           </div>
           <div className="space-y-2">
             {redeemedVouchers.map((voucher) => (
-              <div key={voucher.id} className="border rounded-lg p-3 bg-green-50 border-green-200">
+              <div
+                key={voucher.id}
+                className="border rounded-lg p-3 bg-green-50 border-green-200"
+              >
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-sm mb-0.5">{voucher.title}</p>
                     <p className="text-xs text-gray-600">
-                      Redeemed: {new Date(voucher.date).toLocaleDateString()}
+                      Redeemed: {new Date(voucher.redeemedAt).toLocaleDateString()}
                     </p>
                   </div>
                   <CheckCircle className="w-5 h-5 text-[#4CAF50]" />
@@ -162,7 +166,6 @@ export function Profile() {
           </div>
         </div>
 
-        {/* Re-upload ID */}
         <div>
           <Dialog>
             <DialogTrigger asChild>
@@ -206,7 +209,6 @@ export function Profile() {
           </Dialog>
         </div>
 
-        {/* Admin Access (for demo) */}
         <div className="pt-4 border-t">
           <Button
             onClick={() => navigate("/admin")}

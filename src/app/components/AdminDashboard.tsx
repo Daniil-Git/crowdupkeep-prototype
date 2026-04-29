@@ -4,43 +4,44 @@ import { ArrowLeft, MapPin, MessageCircle, Ban, TrendingUp, Clock, CheckCircle }
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { mockReports } from "../data/mockData";
+import { useAppStore } from "../store/appStore";
 import { toast } from "sonner";
 
 export function AdminDashboard() {
   const navigate = useNavigate();
+  const reports = useAppStore((s) => s.reports);
+  const banUser = useAppStore((s) => s.banUser);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [locationFilter, setLocationFilter] = useState<string>("all");
 
-  const filteredReports = mockReports.filter((report) => {
+  const filteredReports = reports.filter((report) => {
     if (statusFilter !== "all" && report.status !== statusFilter) return false;
     if (locationFilter !== "all" && !report.address.includes(locationFilter)) return false;
     return true;
   });
 
   const stats = {
-    total: mockReports.length,
-    pending: mockReports.filter((r) => r.status === "pending").length,
-    inProgress: mockReports.filter((r) => r.status === "in-progress").length,
-    solved: mockReports.filter((r) => r.status === "solved").length,
+    total: reports.length,
+    pending: reports.filter((r) => r.status === "pending").length,
+    inProgress: reports.filter((r) => r.status === "in-progress").length,
+    solved: reports.filter((r) => r.status === "solved").length,
     avgResolutionHours: 2.3,
   };
 
   const handleBanUser = (username: string) => {
+    banUser(username);
     toast.error(`User ${username} has been banned`);
   };
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <div className="bg-purple-700 text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/profile")}>
+        <button onClick={() => navigate("/profile")} aria-label="Back">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg">Admin Dashboard</h1>
       </div>
 
-      {/* Analytics Cards */}
       <div className="bg-gradient-to-br from-purple-700 to-purple-900 px-4 py-6 text-white">
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
@@ -68,7 +69,6 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="px-4 py-4 border-b bg-gray-50">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -93,15 +93,15 @@ export function AdminDashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All locations</SelectItem>
-                <SelectItem value="Nicosia">Nicosia</SelectItem>
                 <SelectItem value="Limassol">Limassol</SelectItem>
+                <SelectItem value="Old Port">Old Port</SelectItem>
+                <SelectItem value="Molos">Molos</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
       </div>
 
-      {/* Reports Table */}
       <div className="px-4 py-4">
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="w-5 h-5 text-purple-700" />
@@ -125,8 +125,8 @@ export function AdminDashboard() {
                         report.status === "solved"
                           ? "default"
                           : report.status === "in-progress"
-                          ? "secondary"
-                          : "destructive"
+                            ? "secondary"
+                            : "destructive"
                       }
                       className="text-xs flex-shrink-0"
                     >
@@ -138,7 +138,7 @@ export function AdminDashboard() {
                     <span className="truncate">{report.address}</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-gray-500">
-                    <span>by {report.createdBy}</span>
+                    <span>by {report.createdByName}</span>
                     <span className="flex items-center gap-1">
                       <MessageCircle className="w-3 h-3" />
                       {report.comments.length}
@@ -170,7 +170,7 @@ export function AdminDashboard() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleBanUser(report.createdBy)}
+                  onClick={() => handleBanUser(report.createdByName)}
                   className="px-3"
                 >
                   <Ban className="w-4 h-4" />

@@ -5,7 +5,7 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { toast } from "sonner";
-import { useApp } from "../context/AppContext";
+import { useAppStore } from "../store/appStore";
 
 interface PostSolutionModalProps {
   open: boolean;
@@ -14,40 +14,21 @@ interface PostSolutionModalProps {
 }
 
 export function PostSolutionModal({ open, onOpenChange, reportId }: PostSolutionModalProps) {
-  const { reports, updateReport } = useApp();
+  const addSolution = useAppStore((s) => s.addSolution);
   const [description, setDescription] = useState("");
   const [proofPhoto, setProofPhoto] = useState<File | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (description && proofPhoto) {
-      const report = reports.find((r) => r.id === reportId);
-      if (!report) return;
-
-      // Create a new solution
-      const newSolution = {
-        id: report.solutions.length + 1,
-        reportId,
-        description,
-        proofPhotos: ["https://images.unsplash.com/photo-1581092918484-8313827e481c?w=800"], // Mock photo URL
-        submittedBy: "you",
-        submittedAt: new Date().toISOString(),
-        status: "pending" as const,
-      };
-
-      // Update the report with the new solution
-      updateReport(reportId, {
-        solutions: [...report.solutions, newSolution],
-        status: "in-progress",
-      });
-
-      toast.success("Solution submitted! Waiting for admin approval.");
-      onOpenChange(false);
-      setDescription("");
-      setProofPhoto(null);
-    } else {
+    if (!description || !proofPhoto) {
       toast.error("Please provide description and proof photo");
+      return;
     }
+    addSolution({ reportId, description, proofPhoto: null });
+    toast.success("Solution submitted! Waiting for admin approval.");
+    onOpenChange(false);
+    setDescription("");
+    setProofPhoto(null);
   };
 
   return (

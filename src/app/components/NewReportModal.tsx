@@ -8,6 +8,8 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import { toast } from "sonner";
+import { LIMASSOL_CENTER, useAppStore } from "../store/appStore";
+import { xpFor } from "@/lib/xp";
 
 interface NewReportModalProps {
   open: boolean;
@@ -16,26 +18,38 @@ interface NewReportModalProps {
 
 export function NewReportModal({ open, onOpenChange }: NewReportModalProps) {
   const navigate = useNavigate();
+  const addReport = useAppStore((s) => s.addReport);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [difficulty, setDifficulty] = useState([3]);
   const [photo, setPhoto] = useState<File | null>(null);
 
+  const reset = () => {
+    setTitle("");
+    setDescription("");
+    setDifficulty([3]);
+    setPhoto(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (title && description && photo) {
-      const xp = difficulty[0] * 50;
-      toast.success(`Report submitted! You'll earn ${xp} XP when resolved.`);
-      onOpenChange(false);
-      // Reset form
-      setTitle("");
-      setDescription("");
-      setDifficulty([3]);
-      setPhoto(null);
-      setTimeout(() => navigate("/dashboard"), 500);
-    } else {
+    if (!title || !description || !photo) {
       toast.error("Please fill all fields and add a photo");
+      return;
     }
+    const newReport = addReport({
+      title,
+      description,
+      difficulty: difficulty[0],
+      geometry: LIMASSOL_CENTER,
+      photo: null,
+    });
+    toast.success(
+      `Report submitted! You'll earn ${xpFor(difficulty[0])} XP when resolved.`,
+    );
+    onOpenChange(false);
+    reset();
+    setTimeout(() => navigate(`/report/${newReport.id}`), 400);
   };
 
   return (
@@ -45,15 +59,14 @@ export function NewReportModal({ open, onOpenChange }: NewReportModalProps) {
           <DialogTitle>New Report</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {/* GPS Location */}
           <div className="bg-[#E3F2FD] border border-[#1976D2] rounded-lg p-3 flex items-start gap-3">
             <MapPin className="w-5 h-5 text-[#1976D2] flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm">Auto-GPS Location</p>
               <p className="text-xs text-gray-600 mt-0.5">
-                35.1676°N, 33.3736°E
+                {LIMASSOL_CENTER.lat.toFixed(4)}°N, {LIMASSOL_CENTER.lng.toFixed(4)}°E
               </p>
-              <p className="text-xs text-green-600 mt-1">✓ 500m radius OK</p>
+              <p className="text-xs text-green-600 mt-1">✓ Within Limassol coverage area</p>
             </div>
           </div>
 
@@ -144,7 +157,7 @@ export function NewReportModal({ open, onOpenChange }: NewReportModalProps) {
             <div className="flex justify-between items-center mb-2">
               <Label>Difficulty</Label>
               <span className="text-sm">
-                Earn <span className="text-[#4CAF50]">{difficulty[0] * 50} XP</span>
+                Earn <span className="text-[#4CAF50]">{xpFor(difficulty[0])} XP</span>
               </span>
             </div>
             <Slider

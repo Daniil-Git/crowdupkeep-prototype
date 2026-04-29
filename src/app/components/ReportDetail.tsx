@@ -5,13 +5,10 @@ import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Textarea } from "./ui/textarea";
-import { Switch } from "./ui/switch";
-import { Label } from "./ui/label";
 import { PostSolutionModal } from "./PostSolutionModal";
-import { type Comment } from "../data/mockData";
 import { toast } from "sonner";
 import { icon as leafletIcon } from "leaflet";
-import { useApp } from "../context/AppContext";
+import { useAppStore, type ReportComment } from "../store/appStore";
 
 const blueIcon = leafletIcon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
@@ -22,16 +19,45 @@ const blueIcon = leafletIcon({
   shadowSize: [41, 41],
 });
 
-function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number }) {
+interface CommentNode extends ReportComment {
+  replies: CommentNode[];
+}
+
+// Recursive comment tree, derived from the flat parentId list. Mirrors the
+// shape that the API layer's listCommentsForReport produces server-side.
+function buildTree(flat: ReportComment[]): CommentNode[] {
+  const map = new Map<number, CommentNode>();
+  flat.forEach((c) => map.set(c.id, { ...c, replies: [] }));
+  const roots: CommentNode[] = [];
+  for (const c of flat) {
+    const node = map.get(c.id)!;
+    if (c.parentId != null && map.has(c.parentId)) {
+      map.get(c.parentId)!.replies.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
+function CommentItem({
+  comment,
+  depth = 0,
+  onReply,
+}: {
+  comment: CommentNode;
+  depth?: number;
+  onReply: (parentId: number, text: string) => void;
+}) {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState("");
 
   const handleReply = () => {
-    if (replyText.trim()) {
-      toast.success("Reply posted!");
-      setReplyText("");
-      setShowReply(false);
-    }
+    const text = replyText.trim();
+    if (!text) return;
+    onReply(comment.id, text);
+    setReplyText("");
+    setShowReply(false);
   };
 
   return (
@@ -39,18 +65,15 @@ function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number 
       <div className="bg-gray-50 rounded-lg p-3">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-6 h-6 rounded-full bg-[#1976D2] text-white text-xs flex items-center justify-center">
-            {comment.author[0].toUpperCase()}
+            {comment.authorName[0].toUpperCase()}
           </div>
-          <span className="text-sm">{comment.author}</span>
+          <span className="text-sm">{comment.authorName}</span>
           <span className="text-xs text-gray-500">
             {new Date(comment.timestamp).toLocaleTimeString()}
           </span>
         </div>
         <p className="text-sm text-gray-700 mb-2">{comment.text}</p>
-        <button
-          onClick={() => setShowReply(!showReply)}
-          className="text-xs text-[#1976D2]"
-        >
+        <button onClick={() => setShowReply(!showReply)} className="text-xs text-[#1976D2]">
           Reply
         </button>
       </div>
@@ -76,7 +99,7 @@ function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number 
       )}
 
       {comment.replies.map((reply) => (
-        <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+        <CommentItem key={reply.id} comment={reply} depth={depth + 1} onReply={onReply} />
       ))}
     </div>
   );
@@ -85,12 +108,14 @@ function CommentItem({ comment, depth = 0 }: { comment: Comment; depth?: number 
 export function ReportDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { reports, updateReport } = useApp();
+  const reportId = Number(id);
+  const report = useAppStore((s) => s.reports.find((r) => r.id === reportId));
+  const addComment = useAppStore((s) => s.addComment);
+  const acceptSolution = useAppStore((s) => s.acceptSolution);
+
   const [showSolution, setShowSolution] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
-
-  const report = reports.find((r) => r.id === Number(id));
 
   if (!report) {
     return (
@@ -100,41 +125,44 @@ export function ReportDetail() {
     );
   }
 
-  const allPhotos = [...report.photos, ...report.solutions.flatMap((s) => s.proofPhotos)];
+  const allPhotos = [
+    ...report.photos,
+    ...report.solutions.flatMap((s) => s.proofPhotos),
+  ];
+  const tree = buildTree(report.comments);
 
   const handlePostComment = () => {
-    if (newComment.trim()) {
-      toast.success("Comment posted!");
-      setNewComment("");
-    }
+    const text = newComment.trim();
+    if (!text) return;
+    addComment({ reportId: report.id, text });
+    setNewComment("");
+    toast.success("Comment posted!");
+  };
+
+  const handleReply = (parentId: number, text: string) => {
+    addComment({ reportId: report.id, text, parentId });
+    toast.success("Reply posted!");
   };
 
   const handleAcceptSolution = (solutionId: number) => {
-    const updatedSolutions = report.solutions.map((sol) =>
-      sol.id === solutionId ? { ...sol, status: "accepted" as const } : sol
-    );
-    
-    updateReport(report.id, {
-      solutions: updatedSolutions,
-      status: "solved",
-    });
-    
-    toast.success("Solution accepted! Report marked as solved.");
+    const result = acceptSolution(report.id, solutionId);
+    if (result) {
+      toast.success(
+        `Solution accepted — ${result.solverName} earned ${result.xpAwarded} XP!`,
+      );
+    }
   };
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <div className="bg-[#1976D2] text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/dashboard")}>
+        <button onClick={() => navigate("/dashboard")} aria-label="Back">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg">Report Details</h1>
       </div>
 
-      {/* Content */}
       <div className="pb-6">
-        {/* Title and Status */}
         <div className="px-4 py-4 border-b">
           <div className="flex items-start justify-between mb-2">
             <h2 className="flex-1 pr-2">{report.title}</h2>
@@ -143,8 +171,8 @@ export function ReportDetail() {
                 report.status === "solved"
                   ? "default"
                   : report.status === "in-progress"
-                  ? "secondary"
-                  : "destructive"
+                    ? "secondary"
+                    : "destructive"
               }
             >
               {report.status}
@@ -160,7 +188,6 @@ export function ReportDetail() {
           </div>
         </div>
 
-        {/* Photo Carousel */}
         <div className="relative bg-gray-100">
           <img
             src={allPhotos[currentPhotoIndex]}
@@ -176,16 +203,16 @@ export function ReportDetail() {
                   className={`w-2 h-2 rounded-full ${
                     index === currentPhotoIndex ? "bg-white" : "bg-white/50"
                   }`}
+                  aria-label={`Photo ${index + 1}`}
                 />
               ))}
             </div>
           )}
         </div>
 
-        {/* Map */}
         <div className="h-48 border-b">
           <MapContainer
-            center={[report.location.lat, report.location.lng]}
+            center={[report.geometry.lat, report.geometry.lng]}
             zoom={15}
             style={{ height: "100%", width: "100%" }}
             scrollWheelZoom={false}
@@ -193,25 +220,23 @@ export function ReportDetail() {
             zoomControl={false}
           >
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <Marker position={[report.location.lat, report.location.lng]} icon={blueIcon} />
+            <Marker position={[report.geometry.lat, report.geometry.lng]} icon={blueIcon} />
           </MapContainer>
         </div>
 
-        {/* Description */}
         <div className="px-4 py-4 border-b">
           <div className="flex items-start gap-2 mb-3">
             <MapPin className="w-4 h-4 text-gray-500 mt-0.5" />
             <div>
               <p className="text-sm text-gray-600">{report.address}</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Reported by {report.createdBy} • {new Date(report.createdAt).toLocaleDateString()}
+                Reported by {report.createdByName} • {new Date(report.createdAt).toLocaleDateString()}
               </p>
             </div>
           </div>
           <p className="text-gray-700">{report.description}</p>
         </div>
 
-        {/* Solutions */}
         {report.solutions.length > 0 && (
           <div className="px-4 py-4 border-b">
             <h3 className="mb-3 flex items-center gap-2">
@@ -219,9 +244,12 @@ export function ReportDetail() {
               Solutions
             </h3>
             {report.solutions.map((solution) => (
-              <div key={solution.id} className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2">
+              <div
+                key={solution.id}
+                className="bg-green-50 border border-green-200 rounded-lg p-3 mb-2"
+              >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm">{solution.submittedBy}</span>
+                  <span className="text-sm">{solution.submittedByName}</span>
                   <Badge variant="default" className="bg-[#4CAF50]">
                     {solution.status}
                   </Badge>
@@ -234,7 +262,7 @@ export function ReportDetail() {
                   <Button
                     size="sm"
                     onClick={() => handleAcceptSolution(solution.id)}
-                    className="bg-[#4CAF50] hover:bg-[#388E3C]"
+                    className="bg-[#4CAF50] hover:bg-[#388E3C] mt-2"
                   >
                     Accept Solution
                   </Button>
@@ -244,19 +272,17 @@ export function ReportDetail() {
           </div>
         )}
 
-        {/* Comments */}
         <div className="px-4 py-4">
           <h3 className="mb-3 flex items-center gap-2">
             <MessageCircle className="w-5 h-5" />
             Comments ({report.comments.length})
           </h3>
           <div className="mb-4">
-            {report.comments.map((comment) => (
-              <CommentItem key={comment.id} comment={comment} />
+            {tree.map((comment) => (
+              <CommentItem key={comment.id} comment={comment} onReply={handleReply} />
             ))}
           </div>
 
-          {/* New Comment */}
           <div className="border-t pt-4">
             <Textarea
               placeholder="Add a comment..."
@@ -271,7 +297,6 @@ export function ReportDetail() {
           </div>
         </div>
 
-        {/* Action Button */}
         {report.status !== "solved" && (
           <div className="px-4 pb-4">
             <Button
