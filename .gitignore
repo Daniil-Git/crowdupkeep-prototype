@@ -5,3 +5,16 @@ build/
 .env
 *.log
 .aider*
+*claude*
+
+# Main database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary session & journal files
+*.db-shm
+*.db-wal
+*.db-journal
+
+
