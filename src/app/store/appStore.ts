@@ -1,4 +1,5 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { xpFor } from "@/lib/xp";
 import type { LatLng } from "@/lib/geo";
 import { LIMASSOL_CENTER, seedReports, seedRewards, seedUsers } from "../data/mockData";
@@ -89,10 +90,7 @@ interface AppState {
     geometry: LatLng;
     photo?: string | null;
   }) => UiReport;
-  setReportStatus: (
-    reportId: number,
-    status: UiReport["status"],
-  ) => void;
+  setReportStatus: (reportId: number, status: UiReport["status"]) => void;
 
   // comments
   addComment: (input: {
@@ -120,27 +118,29 @@ const PLACEHOLDER_PROOF =
 let nextId = 100_000;
 const newId = () => ++nextId;
 
-export const useAppStore = create<AppState>((set, get) => ({
+const initialRedeemedVouchers: RedeemedVoucher[] = [
+  {
+    id: 9001,
+    rewardId: 3,
+    title: "Coffee Shop €25",
+    code: "CUK-CF25-9821",
+    redeemedAt: "2026-04-10T09:00:00Z",
+  },
+  {
+    id: 9002,
+    rewardId: 4,
+    title: "Cinema Tickets (2x)",
+    code: "CUK-CN2X-4563",
+    redeemedAt: "2026-04-05T19:00:00Z",
+  },
+];
+
+const stateCreator: StateCreator<AppState> = (set, get) => ({
   currentUserId: 7,
   users: seedUsers,
   reports: seedReports,
   rewards: seedRewards,
-  redeemedVouchers: [
-    {
-      id: 9001,
-      rewardId: 3,
-      title: "Coffee Shop €25",
-      code: "CUK-CF25-9821",
-      redeemedAt: "2026-04-10T09:00:00Z",
-    },
-    {
-      id: 9002,
-      rewardId: 4,
-      title: "Cinema Tickets (2x)",
-      code: "CUK-CN2X-4563",
-      redeemedAt: "2026-04-05T19:00:00Z",
-    },
-  ],
+  redeemedVouchers: initialRedeemedVouchers,
   bannedUsernames: [],
 
   getCurrentUser: () => {
@@ -291,6 +291,40 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? s.bannedUsernames
         : [...s.bannedUsernames, username],
     })),
-}));
+});
+
+// Storage adapter that's a no-op outside the browser. Lets the persist
+// middleware run unconditionally without crashing or warning during Node-side
+// Vitest runs (which don't have window/localStorage).
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+const safeStorage = (): StateStorage =>
+  typeof window !== "undefined" && window.localStorage
+    ? window.localStorage
+    : noopStorage;
+
+export const STORAGE_KEY = "crowdupkeep-state-v1";
+
+export const useAppStore = create<AppState>()(
+  persist(stateCreator, {
+    name: STORAGE_KEY,
+    version: 1,
+    storage: createJSONStorage(safeStorage),
+    // Only persist data, not the function selectors. Functions are
+    // re-attached on every store creation by the state creator.
+    partialize: (state) => ({
+      currentUserId: state.currentUserId,
+      users: state.users,
+      reports: state.reports,
+      rewards: state.rewards,
+      redeemedVouchers: state.redeemedVouchers,
+      bannedUsernames: state.bannedUsernames,
+    }),
+  }),
+);
 
 export { LIMASSOL_CENTER };

@@ -23,7 +23,7 @@ export function Dashboard() {
   const myReports = reports.filter((r) => r.createdById === me.id);
 
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col bg-white">
       <div className="bg-[#1976D2] text-white px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -43,7 +43,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <Tabs defaultValue="map" className="flex-1 flex flex-col">
+      <Tabs defaultValue="map" className="flex flex-col">
         <TabsList className="w-full rounded-none border-b">
           <TabsTrigger value="map" className="flex-1">
             Map
@@ -53,19 +53,23 @@ export function Dashboard() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="map" className="flex-1 flex flex-col m-0 overflow-hidden">
-          <div className="flex-1 relative">
+        <TabsContent value="map" className="m-0 flex flex-col">
+          {/* Fixed-height map container so the page itself can scroll
+              naturally when the My Reports list grows. The previous
+              flex-1 + max-h overflow-y-auto pattern produced a nested
+              scrollbar inside the iPhone frame. */}
+          <div className="relative isolate z-0 h-[55vh] overflow-hidden">
             <DashboardMap />
             <button
               onClick={() => setShowNewReport(true)}
               aria-label="Create report"
-              className="absolute bottom-24 right-4 w-14 h-14 rounded-full bg-[#FF9800] hover:bg-[#F57C00] text-white shadow-lg flex items-center justify-center z-[1000]"
+              className="absolute bottom-6 right-4 w-14 h-14 rounded-full bg-[#FF9800] hover:bg-[#F57C00] text-white shadow-lg flex items-center justify-center z-[1000]"
             >
               <Plus className="w-6 h-6" />
             </button>
           </div>
 
-          <div className="border-t bg-white p-4 max-h-[180px] overflow-y-auto">
+          <div className="border-t bg-white p-4">
             <h3 className="mb-3">My Reports</h3>
             {myReports.length === 0 ? (
               <p className="text-sm text-gray-500">No reports yet — tap + to add one.</p>

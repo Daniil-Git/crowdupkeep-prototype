@@ -187,3 +187,121 @@ a search-and-replace, not a rewrite.
 - Coverage thresholds in `vitest.config.ts` are 80%
   lines/functions/statements over `src/lib` and the store, with
   branches at 70% (matching the brief's headline goal).
+
+---
+
+## Stability fixes (round 2)
+
+### 1. Persistence on refresh
+
+The store now uses Zustand's `persist` middleware, keyed under
+`crowdupkeep-state-v1` in `localStorage`, with a `partialize` that
+keeps state out of the persisted blob (only data, not selectors).
+A `noopStorage` fallback runs when `window.localStorage` is
+unavailable so that Vitest in Node can still construct the store
+without warnings.
+
+`App.tsx` now blocks the route tree until
+`useAppStore.persist.hasHydrated()` resolves. Without that gate,
+screens like Profile/Dashboard would mount with the seed data and
+then snap to the persisted values mid-render — a perceptible
+flicker on every refresh, and on the leaderboard it briefly
+displayed the wrong rank.
+
+The version field in the persist config (`version: 1`) is the
+hook for breaking changes: when the schema evolves we bump the
+version and supply a migration, rather than letting stale state
+crash a future build.
+
+### 2. NotificationOverlay routing + duplicate close icon
+
+The Figma version had its own absolutely-positioned `<button>` with
+a lucide `X` rendered against the gradient background — but
+`DialogContent` already injects a `DialogPrimitive.Close` at top-4
+right-4 (see `src/app/components/ui/dialog.tsx:66`). The result
+was two close icons stacked at the same coordinates; the manual
+one was the brighter, the radix one slightly faded. Removing the
+manual button leaves the radix close button as the single
+affordance, with a class override on `DialogContent` to recolor
+it for the gradient background.
+
+Routing was the deeper bug: "View Issue" used to call
+`onOpenChange(false)` and nothing else. The user got a hopeful
+toast and dropped back on the dashboard with no path to the
+issue. The new implementation picks the closest pending report
+to the user's last known location via `pickNearbyReport`
+(haversine over the pending set) and navigates to
+`/report/:id`. If the user has no recorded location, it falls
+back to the first pending report rather than no-op'ing. The
+button is `disabled` when there is genuinely nothing pending,
+which is more honest than navigating to a placeholder.
+
+### 3. Map and image layout
+
+**Dashboard scrollbar.** The previous flex-1 + `max-h-[180px]
+overflow-y-auto` gave us two scrollbars stacked inside the iPhone
+frame: the page itself and a tiny secondary scroller for "My
+Reports". Users on touch devices couldn't reliably scroll either
+one. The map now has a fixed `h-[55vh]`; the My Reports list
+flows below it without internal overflow; the page itself
+scrolls naturally. This matches the rest of the app (Profile,
+Rewards, Leaderboard) which already used the natural-scroll
+pattern.
+
+**ReportDetail map z-index containment.** Leaflet sets z-indexes
+on its internal panes — tiles ~200, overlays ~400, markers ~600,
+popups ~700, controls ~800 — relative to the document. On the
+report detail page, those numbers were leaking through the photo
+above the map and (once the report scrolled) the description
+below. The fix wraps the map in a `relative isolate z-0
+overflow-hidden` container, which (a) creates a fresh stacking
+context so Leaflet's z-indexes only fight among themselves, and
+(b) clips any overflowing panes (e.g. controls that anchor
+outside the map bounds). The `MapContainer` itself also gets
+`zIndex: 0` so its own outer layer participates in the new
+context.
+
+**Map popup navigation.** Previously the marker had a `click`
+handler that navigated, *and* opened a popup at the same time —
+on desktop the popup blinked open and immediately the route
+changed; on touch the same gesture fought the popup tap. The new
+behaviour: clicking a marker opens the popup; the popup body is
+itself a `<button>` that navigates on tap, with an explicit
+"Tap to view details →" affordance so the interaction is
+discoverable.
+
+### 4. Image rendering on `/report/7`
+
+The seed photo URL for report 7
+(`photo-1519642984756-ebf03acb7729`) returns HTTP 404 from
+Unsplash. That was confirmed via `curl -I` against the same URL
+the browser would request. Two fixes landed together:
+
+- **Replaced the dead URL** with `photo-1503455637927-730bce8583c0`
+  (a verified-200 park scene that fits the bench-in-park theme).
+- **Wrapped the photo carousel in `ImageWithFallback`** so the
+  next dead URL — and there will be one — degrades to the
+  shadcn-style placeholder rather than a broken-image icon.
+
+A `safeIndex` clamp on the carousel index also prevents an
+out-of-range render if a report's photo list shrinks (e.g.
+because a solution was edited) while the carousel is open.
+
+### 5. Tests reflecting the changes
+
+- The store reset helper now also calls
+  `useAppStore.persist.clearStorage()` so persisted state from a
+  previous test can never leak into the next one. (In practice
+  the `noopStorage` fallback makes this a no-op in CI, but it's
+  the right shape if a test ever runs against a real
+  `localStorage`.)
+- New `useAppStore` test asserting the persist namespace
+  (`hasHydrated`, `onFinishHydration`, `clearStorage`) is
+  attached — it's a guardrail against accidental regressions
+  where someone removes the middleware in a future refactor and
+  the App.tsx hydration gate silently breaks.
+- New `pickNearbyReport` tests covering the three real branches:
+  "with origin → closest", "without origin → first pending", and
+  "empty → null".
+
+Test count went from 32 to 36, all green.

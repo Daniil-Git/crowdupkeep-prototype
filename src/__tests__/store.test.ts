@@ -1,9 +1,14 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { useAppStore } from "@/app/store/appStore";
+import { pickNearbyReport } from "@/app/components/NotificationOverlay";
 
 // The Zustand store is the in-memory mirror of the persistent layer. Reset it
-// between cases so each test sees a fresh seed.
-const resetStore = () => useAppStore.setState(useAppStore.getInitialState());
+// between cases so each test sees a fresh seed. With persist middleware
+// wrapping the store we also clear its persisted layer to keep state clean.
+const resetStore = () => {
+  useAppStore.persist.clearStorage();
+  useAppStore.setState(useAppStore.getInitialState(), true);
+};
 
 beforeEach(() => {
   resetStore();
@@ -96,5 +101,43 @@ describe("useAppStore", () => {
     banUser("foo");
     banUser("bar");
     expect(useAppStore.getState().bannedUsernames).toEqual(["foo", "bar"]);
+  });
+
+  it("exposes a persistence handle so refresh can rehydrate state", () => {
+    // The persist middleware attaches a `persist` namespace with hydration
+    // helpers. App.tsx relies on these to gate the route tree on hydration.
+    expect(typeof useAppStore.persist.hasHydrated).toBe("function");
+    expect(typeof useAppStore.persist.onFinishHydration).toBe("function");
+    expect(typeof useAppStore.persist.clearStorage).toBe("function");
+  });
+});
+
+describe("pickNearbyReport (NotificationOverlay)", () => {
+  it("returns the closest pending report to the user", () => {
+    const here = { lat: 34.7071, lng: 33.0226 };
+    // Reuse the seed reports — they're guaranteed to include several
+    // pending Limassol-area issues.
+    const reports = useAppStore.getState().reports;
+    const picked = pickNearbyReport(reports, here);
+    expect(picked).not.toBeNull();
+    if (!picked || !("report" in picked)) throw new Error("expected near-result");
+    expect(picked.report.status).toBe("pending");
+    // Distance should be small for Limassol-centred seed data.
+    expect(picked.distanceKm).toBeLessThan(20);
+  });
+
+  it("falls back to the first pending report when no origin is known", () => {
+    const reports = useAppStore.getState().reports;
+    const picked = pickNearbyReport(reports, undefined);
+    expect(picked).not.toBeNull();
+    // No distance metadata when origin is missing.
+    if (picked && "report" in picked) {
+      throw new Error("did not expect distance metadata");
+    }
+  });
+
+  it("returns null when there are no pending reports", () => {
+    const picked = pickNearbyReport([], { lat: 0, lng: 0 });
+    expect(picked).toBeNull();
   });
 });

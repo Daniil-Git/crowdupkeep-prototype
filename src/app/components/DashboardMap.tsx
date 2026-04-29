@@ -42,10 +42,14 @@ export function DashboardMap() {
           key={`marker-${report.id}`}
           position={[report.geometry.lat, report.geometry.lng]}
           icon={ICONS[report.status]}
-          eventHandlers={{ click: () => navigate(`/report/${report.id}`) }}
         >
           <Popup>
-            <div style={{ minWidth: 150 }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/report/${report.id}`)}
+              className="text-left"
+              style={{ minWidth: 150 }}
+            >
               <p style={{ marginBottom: 4 }}>{report.title}</p>
               <Badge
                 variant={
@@ -58,7 +62,10 @@ export function DashboardMap() {
               >
                 {report.status}
               </Badge>
-            </div>
+              <p style={{ marginTop: 6, fontSize: 11, color: "#1976D2" }}>
+                Tap to view details →
+              </p>
+            </button>
           </Popup>
         </Marker>
       ))}

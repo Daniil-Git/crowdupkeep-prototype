@@ -173,7 +173,7 @@ export const seedReports: UiReport[] = [
     createdById: 7,
     createdByName: "you",
     createdAt: "2026-04-14T09:30:00Z",
-    photos: ["https://images.unsplash.com/photo-1519642984756-ebf03acb7729?w=800"],
+    photos: ["https://images.unsplash.com/photo-1503455637927-730bce8583c0?w=800"],
     comments: [
       c(4, 6, "Thanks for reporting! We'll fix this soon.", null, "2026-04-14T10:00:00Z"),
     ],

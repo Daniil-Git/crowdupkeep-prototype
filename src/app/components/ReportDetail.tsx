@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Textarea } from "./ui/textarea";
 import { PostSolutionModal } from "./PostSolutionModal";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { toast } from "sonner";
 import { icon as leafletIcon } from "leaflet";
 import { useAppStore, type ReportComment } from "../store/appStore";
@@ -129,6 +130,7 @@ export function ReportDetail() {
     ...report.photos,
     ...report.solutions.flatMap((s) => s.proofPhotos),
   ];
+  const safeIndex = Math.min(currentPhotoIndex, Math.max(0, allPhotos.length - 1));
   const tree = buildTree(report.comments);
 
   const handlePostComment = () => {
@@ -188,10 +190,13 @@ export function ReportDetail() {
           </div>
         </div>
 
+        {/* Photo carousel — wrapped with ImageWithFallback so a 404'd
+            Unsplash URL collapses to a placeholder rather than rendering as
+            a broken-image icon. */}
         <div className="relative bg-gray-100">
-          <img
-            src={allPhotos[currentPhotoIndex]}
-            alt="Report"
+          <ImageWithFallback
+            src={allPhotos[safeIndex]}
+            alt={`Report photo ${safeIndex + 1}`}
             className="w-full h-64 object-cover"
           />
           {allPhotos.length > 1 && (
@@ -201,7 +206,7 @@ export function ReportDetail() {
                   key={index}
                   onClick={() => setCurrentPhotoIndex(index)}
                   className={`w-2 h-2 rounded-full ${
-                    index === currentPhotoIndex ? "bg-white" : "bg-white/50"
+                    index === safeIndex ? "bg-white" : "bg-white/50"
                   }`}
                   aria-label={`Photo ${index + 1}`}
                 />
@@ -210,11 +215,16 @@ export function ReportDetail() {
           )}
         </div>
 
-        <div className="h-48 border-b">
+        {/* Map container is its own stacking context with a clipped
+            overflow box. Leaflet sets z-indices on its internal panes
+            (markers, popups, controls) up to ~700; isolating the parent
+            keeps those from punching through the photo above or the
+            description below. */}
+        <div className="relative isolate z-0 h-48 overflow-hidden border-b">
           <MapContainer
             center={[report.geometry.lat, report.geometry.lng]}
             zoom={15}
-            style={{ height: "100%", width: "100%" }}
+            style={{ height: "100%", width: "100%", zIndex: 0 }}
             scrollWheelZoom={false}
             dragging={false}
             zoomControl={false}
