@@ -386,3 +386,39 @@ The fix:
   candidate set entirely.
 
 Test count now 47 (was 36), all green.
+
+## Nearby Issue Popup: sync Credits + Title + Availability
+
+The `NotificationOverlay` nearby‑issue popup was previously showing **hardcoded** `+100 XP` and a static title/fallback, without wiring into live reward/XP logic. This entry refactors the popup so Credits, Title, and Availability are derived from the same store data as the rest of the UI, making them consistent and “in sync” with the current dev branch.
+
+- **`pickNearbyReport` moved to `src/lib/nearby.ts`**  
+  The helper that picks the closest pending report is now a pure, store‑agnostic function, re‑used directly by both `NotificationOverlay` and the store tests. The `store.test.ts` cases are retitled to `pickNearbyReport (lib/nearby)` to reflect the new location and keep coverage aligned with the refactored logic.
+
+- **NotificationOverlay now derives everything from store state**  
+  The popup now:
+  - Uses `getRewardStatusForReport(reportId)` (added to `AppState`) to determine whether a reward is still available and how much XP it costs.
+  - Computes `rewardLabel` via `getProximityRewardLabel(xp, rewardStatus)` so the XP hint is always consistent with `xpFor(difficulty)`.
+  - Dynamically shows:
+    - Title as `nearbyReport.title` (or a generic label when none is available).
+    - Distance as `~X.Xkm away` using `haversineKm(me.location, nearbyReport.geometry)`.
+    - Availability status: when `!rewardStatus.available`, the popup additionally shows a small `No reward available` tag with a `Package` icon.
+
+- **XP and reward logic unified in the store**  
+  A new `getRewardStatusForReport` selector was added to `appStore.ts` that:
+  - Maps `report.id` to a reward (if any) via `rewards.find(r => r.id === reportId)`.
+  - Exposes `{ xpCost, available, stock }` so the UI can reflect real‑time availability without duplicating voucher‑logic.
+
+- **UI text and behavior tightened**  
+  The popup’s copy was updated to clearly distinguish:
+  - generic civic‑engagement encouragement when no issue is nearby, and
+  - concrete XP plus reward text when a qualified issue is visible.
+  The `View Issue` button is now disabled when:
+  - there is no `nearbyReport`, or
+  - the tied‑to‑it reward is no longer available (`disabled={disabled}`).
+
+These changes ensure the Nearby Issue Popup no longer relies on hardcoded strings for Credits, Title, or Availability, but instead queries the same store slice and helpers (`nearby.ts`, `geo.ts`, `districts.ts`, `xp.ts`) that underpin the rest of the MVP, so behavior stays consistent across the dev branch.
+
+
+- Minor demo‑only adjustments:
+  - Renewed the IKEA‑style voucher image URL to keep the Unsplash pattern aligned.
+  - Tweaked sample XP values on selected fake‑user reports so the popup’s XP hints are more representative in the thesis demo.

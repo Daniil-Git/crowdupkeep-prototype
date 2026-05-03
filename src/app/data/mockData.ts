@@ -15,7 +15,7 @@ export const seedUsers: UiUser[] = [
   { id: 3, username: "city_champion", email: "city_champion@limassol.cy", xp: 2750, streak: 10, avatar: "https://i.pravatar.cc/150?img=3" },
   { id: 4, username: "eco_defender", email: "eco_defender@limassol.cy", xp: 2340, streak: 8, avatar: "https://i.pravatar.cc/150?img=4" },
   { id: 5, username: "clean_streets", email: "clean_streets@limassol.cy", xp: 2100, streak: 7, avatar: "https://i.pravatar.cc/150?img=5" },
-  { id: 6, username: "volunteers_cy", email: "volunteers_cy@limassol.cy", xp: 1890, streak: 9, avatar: "https://i.pravatar.cc/150?img=6" },
+  { id: 6, username: "volunteers_cy", email: "volunteers_cy@limassol.cy", xp: 1490, streak: 9, avatar: "https://i.pravatar.cc/150?img=6" },
   { id: 7, username: "you", email: "you@limassol.cy", xp: 1250, streak: 5, avatar: "https://i.pravatar.cc/150?img=7" },
   { id: 8, username: "maria_k", email: "maria_k@limassol.cy", xp: 1120, streak: 4, avatar: "https://i.pravatar.cc/150?img=8" },
   { id: 9, username: "john_d", email: "john_d@limassol.cy", xp: 980, streak: 3, avatar: "https://i.pravatar.cc/150?img=9" },
@@ -188,7 +188,7 @@ export const seedRewards: UiReward[] = [
     description: "Spend on any IKEA products.",
     xpCost: 1000,
     stock: 3,
-    imageUrl: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=400",
+    imageUrl: "https://images.unsplash.com/photo-1567711601167-cd0efb1f8a99?w=400",
   },
   {
     id: 2,

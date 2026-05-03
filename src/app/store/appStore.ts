@@ -114,6 +114,14 @@ interface AppState {
 
   // admin
   banUser: (username: string) => void;
+
+  // ADD THIS HERE ↓
+  getRewardStatusForReport: (reportId: string) => {
+    xpCost: number;
+    available: boolean;
+    stock: number;
+  } | null;
+
 }
 
 const PLACEHOLDER_PHOTO =
@@ -300,6 +308,18 @@ const stateCreator: StateCreator<AppState> = (set, get) => ({
         ? s.bannedUsernames
         : [...s.bannedUsernames, username],
     })),
+
+    // FINALLY ↓
+  getRewardStatusForReport: (reportId: string) => {
+    const reward = get().rewards.find((r) => r.id === Number(reportId));
+    if (!reward) return null;
+    return {
+      xpCost: reward.xpCost,
+      available: reward.stock > 0,
+      stock: reward.stock,
+    };
+  },
+
 });
 
 // Storage adapter that's a no-op outside the browser. Lets the persist

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { useAppStore } from "@/app/store/appStore";
-import { pickNearbyReport } from "@/app/components/NotificationOverlay";
+import { pickNearbyReport } from "@/lib/nearby";
 import { ALL_LOCATIONS } from "@/lib/districts";
 
 // The Zustand store is the in-memory mirror of the persistent layer. Reset it
@@ -137,7 +137,7 @@ describe("useAppStore", () => {
   });
 });
 
-describe("pickNearbyReport (NotificationOverlay)", () => {
+describe("pickNearbyReport (lib/nearby)", () => {
   it("returns the closest pending report to the user", () => {
     const here = { lat: 34.7071, lng: 33.0226 };
     // Reuse the seed reports — they're guaranteed to include several
