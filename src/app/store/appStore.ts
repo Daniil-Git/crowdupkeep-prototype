@@ -2,7 +2,12 @@ import { create, type StateCreator } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { xpFor } from "@/lib/xp";
 import type { LatLng } from "@/lib/geo";
-import { ALL_LOCATIONS, type LocationFilter } from "@/lib/districts";
+import {
+  ALL_LOCATIONS,
+  DISTRICT_CENTERS,
+  type District,
+  type LocationFilter,
+} from "@/lib/districts";
 import { LIMASSOL_CENTER, seedReports, seedRewards, seedUsers } from "../data/mockData";
 
 // In-browser state mirrors the Prisma schema closely so swapping the runtime
@@ -93,7 +98,12 @@ interface AppState {
     title: string;
     description: string;
     difficulty: number;
-    geometry: LatLng;
+    // Either supply explicit geometry/address (admin/test path) or a
+    // district — citizens filing from the dashboard go via district so the
+    // pin lands in the area they're already filtering by.
+    geometry?: LatLng;
+    address?: string;
+    district?: District;
     photo?: string | null;
   }) => UiReport;
   setReportStatus: (reportId: number, status: UiReport["status"]) => void;
@@ -115,13 +125,18 @@ interface AppState {
   // admin
   banUser: (username: string) => void;
 
-  // ADD THIS HERE ↓
-  getRewardStatusForReport: (reportId: string) => {
+  // Returns the credits + availability metadata the Nearby popup renders
+  // for a given report. xpCost is the XP earned by solving the report
+  // (xpFor(difficulty)). `available` is true when the report is still
+  // solvable AND there is some redeemable reward inventory left — the
+  // combination the proximity prompt is trying to pitch.
+  getRewardStatusForReport: (
+    reportId: number | string,
+  ) => {
     xpCost: number;
     available: boolean;
     stock: number;
   } | null;
-
 }
 
 const PLACEHOLDER_PHOTO =
@@ -172,16 +187,31 @@ const stateCreator: StateCreator<AppState> = (set, get) => ({
       ),
     })),
 
-  addReport: ({ title, description, difficulty, geometry, photo }) => {
+  addReport: ({ title, description, difficulty, geometry, address, district, photo }) => {
     const me = get().getCurrentUser();
+
+    // Resolve geometry + address. Order of preference:
+    //   1. Explicit geometry/address (callers that already know the spot).
+    //   2. district -> DISTRICT_CENTERS lookup (citizen flow with a chosen
+    //      area). The address built here matches the regex matchers in
+    //      lib/districts.ts so the new pin participates in district
+    //      filtering immediately.
+    //   3. Fallback to LIMASSOL_CENTER for "no context" reports.
+    const districtAnchor = district ? DISTRICT_CENTERS[district] : null;
+    const finalGeometry: LatLng = geometry ?? districtAnchor?.geometry ?? LIMASSOL_CENTER;
+    const finalAddress: string =
+      address ??
+      districtAnchor?.address ??
+      `Limassol (${finalGeometry.lat.toFixed(4)}, ${finalGeometry.lng.toFixed(4)})`;
+
     const report: UiReport = {
       id: newId(),
       title,
       description,
       difficulty,
       status: "pending",
-      geometry,
-      address: `Limassol (${geometry.lat.toFixed(4)}, ${geometry.lng.toFixed(4)})`,
+      geometry: finalGeometry,
+      address: finalAddress,
       createdById: me.id,
       createdByName: me.username,
       createdAt: new Date().toISOString(),
@@ -309,17 +339,20 @@ const stateCreator: StateCreator<AppState> = (set, get) => ({
         : [...s.bannedUsernames, username],
     })),
 
-    // FINALLY ↓
-  getRewardStatusForReport: (reportId: string) => {
-    const reward = get().rewards.find((r) => r.id === Number(reportId));
-    if (!reward) return null;
+  getRewardStatusForReport: (reportId) => {
+    const id = typeof reportId === "string" ? Number(reportId) : reportId;
+    const report = get().reports.find((r) => r.id === id);
+    if (!report) return null;
+    // Total redeemable inventory across all rewards. The popup uses this
+    // to decide whether earning XP here is meaningful — if the catalogue
+    // is empty, "earn XP + reward" is a hollow promise.
+    const totalStock = get().rewards.reduce((acc, r) => acc + r.stock, 0);
     return {
-      xpCost: reward.xpCost,
-      available: reward.stock > 0,
-      stock: reward.stock,
+      xpCost: xpFor(report.difficulty),
+      available: report.status !== "solved" && totalStock > 0,
+      stock: totalStock,
     };
   },
-
 });
 
 // Storage adapter that's a no-op outside the browser. Lets the persist

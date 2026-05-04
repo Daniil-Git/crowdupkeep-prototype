@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ALL_LOCATIONS,
   DISTRICTS,
+  DISTRICT_CENTERS,
   LOCATION_OPTIONS,
   addressToDistrict,
   matchesFilter,
@@ -44,5 +45,27 @@ describe("districts", () => {
   it("is case-insensitive in matching", () => {
     expect(addressToDistrict("limassol OLD port")).toBe("Old Port");
     expect(addressToDistrict("ANEXARTISIAS")).toBe("Centre");
+  });
+
+  it("DISTRICT_CENTERS round-trips through addressToDistrict for every named district", () => {
+    // The auto-link path in addReport(district) only works if the canonical
+    // address for that district is one the matchers recognise. Otherwise
+    // pins filed via the dropdown would silently fall into "Other" and the
+    // citizen's chosen filter wouldn't show their own report.
+    for (const d of DISTRICTS) {
+      if (d === "Other") continue; // "Other" intentionally has a generic address
+      const { address } = DISTRICT_CENTERS[d];
+      expect(addressToDistrict(address)).toBe(d);
+    }
+  });
+
+  it("DISTRICT_CENTERS coords are inside the Limassol bounding region", () => {
+    for (const d of DISTRICTS) {
+      const { geometry } = DISTRICT_CENTERS[d];
+      expect(geometry.lat).toBeGreaterThan(34.6);
+      expect(geometry.lat).toBeLessThan(34.8);
+      expect(geometry.lng).toBeGreaterThan(33.0);
+      expect(geometry.lng).toBeLessThan(33.1);
+    }
   });
 });

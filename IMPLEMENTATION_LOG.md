@@ -422,3 +422,202 @@ These changes ensure the Nearby Issue Popup no longer relies on hardcoded string
 - Minor demo‑only adjustments:
   - Renewed the IKEA‑style voucher image URL to keep the Unsplash pattern aligned.
   - Tweaked sample XP values on selected fake‑user reports so the popup’s XP hints are more representative in the thesis demo.
+
+---
+
+## Stability fixes (round 4)
+
+### 1. The "fall back to defaults" Nearby popup
+
+The picker that feeds the Nearby Issue overlay was filtering on
+`r.status === "open"`. There is no `"open"` status anywhere in the
+codebase — the canonical enum is `"pending" | "in-progress" | "solved"`.
+That single literal was emptying the candidate set on every render,
+so `pickNearbyReport` returned `null` and `NotificationOverlay`
+fell through to its generic copy ("🚨 Nearby civic issue", "Help
+your neighbours…") for every district. The three picker tests in
+`store.test.ts` had been failing since the regression landed.
+
+The fix in `lib/nearby.ts`:
+- Filter on `"pending"` to match the actual report enum.
+- Restore proper typing (`NearbyCandidate` generic) instead of the
+  `any[]` escape hatch — that's what let the wrong literal slip in
+  unnoticed.
+- Keep the picker pure; no store binding so unit tests can hit it
+  with synthetic fixtures.
+
+While there, `NotificationOverlay` had three secondary bugs that
+would have surfaced as runtime errors the moment the picker
+returned anything non-null:
+- It pulled `xpFor` from `useAppStore.getState()` — `xpFor` lives
+  in `@/lib/xp`, not on the store, so the call would have thrown
+  *xpFor is not a function*.
+- It checked `bannedUsernames.includes(r.createdBy?.email)`. The
+  `UiReport` shape has `createdById` and `createdByName`, no
+  nested `createdBy` object, so the check silently always passed.
+  Now the overlay filters by `createdByName`.
+- `useState(null)` for `nearbyReport`/`rewardStatus` lost type
+  information (TS inferred `null`), making subsequent assignments
+  type errors. Replaced with a single `useMemo` over the store
+  selectors, which is also less work per render.
+
+`getRewardStatusForReport` was looking up `rewards.find(r => r.id === Number(reportId))` — wrong collection. The function name says
+"for a report" but it was indexing the rewards table with a report
+id. Re-implemented to:
+- Look up the actual report.
+- Compute `xpCost` from the shared `xpFor(difficulty)` helper, so
+  the popup, the leaderboard, and the API can never disagree.
+- Treat `available` as "report is still solvable AND there is some
+  redeemable reward inventory left" — the combination the popup is
+  pitching ("earn XP + reward").
+- Accept either a `number` or a `string` id so call sites that get
+  values from `useParams()` don't need their own coercion.
+
+The label-rendering branch (`+XP challenge` / `+XP + reward`) was
+extracted into `proximityRewardLabel(xp, rewardStatus)` and
+re-exported from the overlay so it can be unit-tested without a
+render tree.
+
+### 2. Single source of truth for districts
+
+Before this round, the citizen `LocationDropdown` and the admin
+dashboard each had their own location filter:
+- Citizen: `selectedDistrict` in the Zustand store, six districts
+  derived from the seed addresses, persisted across refresh.
+- Admin: a local `useState<string>("all")` with three hardcoded
+  options ("Limassol", "Old Port", "Molos") and a substring
+  `address.includes(...)` test.
+
+Toggling on one side did nothing on the other, the option lists
+disagreed, and the `"Limassol"` substring test matched every
+report regardless of neighbourhood (every seed address contains
+"Limassol"), so the admin filter was effectively a no-op.
+
+`AdminDashboard.tsx` now:
+- Drops the local `locationFilter` state.
+- Renders the same `<LocationDropdown />` component the citizen
+  views render.
+- Filters with `matchesFilter(address, selectedDistrict)` from
+  `lib/districts.ts` — same matchers the citizen surfaces use.
+- Computes its headline stats (`total / pending / inProgress /
+  solved`) from the *filtered* set, so picking "Old Port" updates
+  the numbers in the purple stat band, not just the table below.
+
+### 3. Auto-linking new reports to a district
+
+`NewReportModal` was hard-coding `geometry: LIMASSOL_CENTER`, and
+the store's `addReport` was synthesising an address of
+`"Limassol (lat, lng)"`. None of the district matchers recognise
+that shape, so every new report fell into the `"Other"` bucket.
+A citizen filtering by "Centre" wouldn't see the report they had
+just filed *from* the Centre filter.
+
+Two changes:
+- `lib/districts.ts` exports `DISTRICT_CENTERS` — a representative
+  `{ geometry, address }` per district, taken from the seed
+  anchors so new pins land where reviewers expect them. Round-trip
+  is enforced in `districts.test.ts`:
+  `addressToDistrict(DISTRICT_CENTERS[d].address) === d`.
+- `addReport` accepts an optional `district`. When supplied it
+  resolves geometry + address from `DISTRICT_CENTERS`. Explicit
+  `geometry` / `address` still win (admin/test path), and the
+  bare-call fallback to `LIMASSOL_CENTER` still works.
+
+`NewReportModal` now reads the global `selectedDistrict`, defaults
+the modal's draft to it (or `"Centre"` when the user is on
+`"All Locations"`), exposes a District `<Select>` so the user can
+override before submit, and shows the resolved anchor address +
+coords as a confirmation strip. After submit, if the user was
+filtering on a specific district that differs from the chosen
+draft, we snap the global filter to the new district so the
+just-filed pin appears without a manual re-select.
+
+### 4. Search + dynamic stats consistency
+
+The admin dashboard now also has a free-text search input that
+runs over `title / description / address / createdByName`. It
+flows through the same `useMemo` pipeline as the district +
+status filters, so the headline stats reflect the search term
+too. There's no equivalent search on the citizen dashboard yet
+(the citizen only sees their own reports there), but the
+`filteredReports` shape and reducer pattern are the same on both
+sides, ready to be lifted if needed.
+
+### 5. Tests reflecting the changes
+
+- `store.test.ts` picker tests: now passing on the `"pending"`
+  status. The 3 failures that motivated this round are green.
+- `districts.test.ts`: 2 new cases — every `DISTRICT_CENTERS`
+  address round-trips through the matcher, and every anchor
+  geometry sits inside a Limassol-region bounding box.
+- `store.test.ts`:
+  - `addReport({ district: "Old Port" })` produces an address
+    the matcher recognises and geometry inside the Old Port
+    anchor zone.
+  - `getRewardStatusForReport`: 5 cases — pending report with
+    stock is `available`, solved report is not, no-stock makes
+    even pending reports unavailable, unknown id returns null,
+    string-id coercion works.
+  - `proximityRewardLabel`: 4 cases — `null` status, unavailable
+    status, matching xp, and divergent xp (store wins).
+
+Test count went from 47 to 59, all green.
+
+---
+
+## Stability fixes (round 5) — empty-state popup suppression
+
+The Nearby popup must not lie. If, for the active district, there is
+nothing pending to surface, the overlay should not appear at all —
+not even with default copy. Defense in depth across two layers:
+
+### 1. The shared gating predicate
+
+Added `hasNearbyReport(reports, origin, districtFilter)` next to the
+existing `pickNearbyReport` in `lib/nearby.ts`. It is the boolean
+dual of the picker — true iff `pickNearbyReport(...) !== null`. The
+trigger and the render gate now both route through this predicate,
+so the answer to "should we open?" can never disagree with "what
+would we render?". They share the exact same candidate set.
+
+### 2. Trigger gate (Dashboard)
+
+The 3-second timer in `Dashboard.tsx` previously called
+`setShowNotification(true)` unconditionally. It now reads the
+latest store state at trigger time and only opens the popup when
+`hasNearbyReport(visibleReports, me.location, selectedDistrict)`
+is true. Reading state in the timer callback (rather than closing
+over the values from mount) is intentional: a citizen who switches
+districts during the 3-second window should be evaluated against
+the new filter, not the one they landed with.
+
+### 3. Render gate (NotificationOverlay)
+
+When `picked` is `null`, the overlay returns `null` — no Dialog,
+no default copy, no focus trap. A `useEffect` also calls
+`onOpenChange(false)` so the parent's `open` state stays in sync
+(important for the case where the popup was already showing for
+"Old Port" and the citizen flips the dropdown to a district with
+no pending issues — the overlay self-dismisses).
+
+Now that the empty branch is unreachable inside the rendered
+markup, the conditional copy was dropped. The header is always the
+report's title and the body always pitches the concrete XP-plus-
+reward. This shrinks the component and removes a class of "what if
+nearby is null but we're past the early return" follow-on bugs.
+
+### 4. Tests
+
+Four new cases in `store.test.ts` covering both branches of
+`hasNearbyReport`:
+
+- All reports flipped to `solved` → predicate is `false` for every
+  district (the canonical "popup must stay closed" scenario).
+- Empty report list → `false`, with and without an origin.
+- Seed data + active district that contains a pending report →
+  `true`.
+- Drop the only pending Old Port report → predicate flips to
+  `false` for "Old Port" while still `true` for `"All Locations"`,
+  proving the gate is district-sensitive.
+
+Test count went from 59 to 63, all green.

@@ -1,30 +1,32 @@
-// src/app/components/NotificationOverlay.tsx
+import { useEffect, useMemo } from "react";
 import { MapPin, Clock, Package } from "lucide-react";
 import { useNavigate } from "react-router";
-import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { useAppStore } from "../store/appStore";
-import { haversineKm } from "@/lib/geo";
 import { pickNearbyReport } from "@/lib/nearby";
-import { matchesFilter, type LocationFilter } from "@/lib/districts";
-
-function getProximityRewardLabel(
-  xp: number,
-  rewardStatus: ReturnType<typeof useAppStore["getRewardStatusForReport"]> | null,
-) {
-  if (!rewardStatus || !rewardStatus.available) {
-    return `+${xp} XP challenge`;
-  }
-  if (rewardStatus.xpCost !== xp) {
-    return `+${rewardStatus.xpCost} XP + reward`;
-  }
-  return `+${xp} XP + reward`;
-}
+import { xpFor } from "@/lib/xp";
 
 interface NotificationOverlayProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface RewardStatus {
+  xpCost: number;
+  available: boolean;
+  stock: number;
+}
+
+// Renders the yellow highlight phrase under the title. Folded into a pure
+// helper so the variants stay readable and so it can be unit-tested without
+// mounting a Dialog.
+export function proximityRewardLabel(xp: number, status: RewardStatus | null): string {
+  if (!status || !status.available) return `+${xp} XP challenge`;
+  // The store may compute xpCost from the report's difficulty too. Showing
+  // both numbers when they differ is misleading, so collapse on equality.
+  if (status.xpCost !== xp) return `+${status.xpCost} XP + reward`;
+  return `+${xp} XP + reward`;
 }
 
 export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayProps) {
@@ -33,91 +35,75 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
   const me = useAppStore((s) => s.getCurrentUser());
   const selectedDistrict = useAppStore((s) => s.selectedDistrict);
   const bannedUsernames = useAppStore((s) => s.bannedUsernames);
+  const getRewardStatusForReport = useAppStore((s) => s.getRewardStatusForReport);
 
-  const [nearbyReport, setNearbyReport] = useState(null);
-  const [rewardStatus, setRewardStatus] = useState(null);
-
-  useEffect(() => {
-    const pendingReports = reports.filter((r) =>
-      r.status === "open" &&
-      !bannedUsernames.includes(r.createdBy?.email ?? "") &&
-      matchesFilter(r.address ?? "", selectedDistrict)
+  // Memoised so a re-render that doesn't change inputs (e.g. dialog
+  // open/close) doesn't keep recomputing the haversine sort.
+  const picked = useMemo(() => {
+    // Drop authors who've been banned from the moderation surface — they
+    // shouldn't get free promotion via the Nearby prompt either.
+    const visible = reports.filter(
+      (r) => !bannedUsernames.includes(r.createdByName),
     );
+    return pickNearbyReport(visible, me.location, selectedDistrict);
+  }, [reports, bannedUsernames, me.location, selectedDistrict]);
 
-    const picked = pickNearbyReport(pendingReports, me.location, selectedDistrict);
-    const report = picked?.report ?? null;
+  const nearby = picked && "report" in picked ? picked.report : picked;
+  const distanceKm = picked && "distanceKm" in picked ? picked.distanceKm : null;
 
-    setNearbyReport(report);
+  // If the candidate set is empty for the active district, the popup must
+  // not render its default copy — the user explicitly asked us not to lie
+  // about "nearby civic issues" when none exist. We also push the parent's
+  // `open` state back to false so its trigger state stays in sync (e.g.
+  // after a district change drains the visible set mid-display).
+  useEffect(() => {
+    if (open && !nearby) onOpenChange(false);
+  }, [open, nearby, onOpenChange]);
 
-    const xpFor = useAppStore.getState().xpFor;
-    const getRewardStatusForReport = useAppStore.getState().getRewardStatusForReport;
+  if (!nearby) return null;
 
-    if (report) {
-      const xp = xpFor(report.difficulty);
-      const status = getRewardStatusForReport(report.id);
-      setRewardStatus(status);
-    } else {
-      setRewardStatus(null);
-    }
-  }, [reports, me.location, selectedDistrict, bannedUsernames]);
-
-  const distanceKm = nearbyReport
-    ? haversineKm(me.location ?? { lat: 0, lng: 0 }, nearbyReport.geometry)
-    : null;
+  const xp = xpFor(nearby.difficulty);
+  const rewardStatus = getRewardStatusForReport(nearby.id);
+  const rewardLabel = proximityRewardLabel(xp, rewardStatus);
 
   const distanceLabel = (() => {
     if (distanceKm == null) return "Nearby";
-    if (distanceKm < 1)
-      return `Just ${Math.round(distanceKm * 1000)}m away`;
+    if (distanceKm < 1) return `Just ${Math.round(distanceKm * 1000)}m away`;
     return `~${distanceKm.toFixed(1)}km away`;
   })();
 
-  const xpFor = useAppStore.getState().xpFor;
-  const xp = nearbyReport ? xpFor(nearbyReport.difficulty) : 0;
-  const rewardLabel = xp > 0 ? getProximityRewardLabel(xp, rewardStatus) : "";
-
   const isAvailable = rewardStatus?.available ?? true;
-  const disabled = !nearbyReport || !isAvailable;
+  const disabled = !isAvailable;
 
   const handleView = () => {
     onOpenChange(false);
-    if (nearbyReport) navigate(`/report/${nearbyReport.id}`);
+    navigate(`/report/${nearby.id}`);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-[340px] bg-gradient-to-br from-[#FF5722] to-[#F4511E] text-white border-none [&>button]:text-white/90 [&>button]:hover:text-white"
-      >
+      <DialogContent className="max-w-[340px] bg-gradient-to-br from-[#FF5722] to-[#F4511E] text-white border-none [&>button]:text-white/90 [&>button]:hover:text-white">
         <DialogTitle className="sr-only">Nearby civic issue</DialogTitle>
         <div className="pt-1 pb-1">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
               <MapPin className="w-6 h-6" />
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg">
-                {nearbyReport
-                  ? `🚨 Nearby Issue: ${nearbyReport.title}`
-                  : "🚨 Nearby civic issue"}
-              </h3>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg truncate">🚨 {nearby.title}</h3>
               <p className="text-white/90 text-sm">{distanceLabel}</p>
             </div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 mb-4">
-            <p className="text-sm text-white/80">
-              {nearbyReport
-                ? <>
-                    Help resolve this {nearbyReport.difficulty}-difficulty issue and earn{" "}
-                    <span className="text-yellow-300 font-bold">{rewardLabel}</span> when you solve it.
-                  </>
-                : "Help communities clean up nearby issues and earn XP by solving issues."}
+            <p className="text-sm text-white/90">
+              Help resolve this {nearby.difficulty}-difficulty issue and earn{" "}
+              <span className="text-yellow-300 font-bold">{rewardLabel}</span> when you solve it.
             </p>
             {rewardStatus && !rewardStatus.available && (
               <p className="text-white/70 text-xs mt-1 flex items-center gap-1">
                 <Package className="w-3 h-3" />
-                No reward available
+                No reward inventory available right now
               </p>
             )}
           </div>
@@ -144,4 +130,3 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
     </Dialog>
   );
 }
-

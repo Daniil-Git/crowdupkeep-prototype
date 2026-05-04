@@ -9,6 +9,7 @@ import { DashboardMap } from "./DashboardMap";
 import { LocationDropdown } from "./LocationDropdown";
 import { useAppStore } from "../store/appStore";
 import { matchesFilter } from "@/lib/districts";
+import { hasNearbyReport } from "@/lib/nearby";
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -19,7 +20,21 @@ export function Dashboard() {
   const [showNotification, setShowNotification] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowNotification(true), 3000);
+    // Read latest store state at trigger time (not at mount) so a district
+    // switch in the 3-second window is respected. If there's nothing
+    // eligible for the active filter, we never open the popup at all —
+    // the overlay's render gate is a backstop, not the only line of
+    // defence.
+    const timer = setTimeout(() => {
+      const s = useAppStore.getState();
+      const me = s.getCurrentUser();
+      const visible = s.reports.filter(
+        (r) => !s.bannedUsernames.includes(r.createdByName),
+      );
+      if (hasNearbyReport(visible, me.location, s.selectedDistrict)) {
+        setShowNotification(true);
+      }
+    }, 3000);
     return () => clearTimeout(timer);
   }, []);
 
