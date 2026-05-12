@@ -621,3 +621,74 @@ Four new cases in `store.test.ts` covering both branches of
   proving the gate is district-sensitive.
 
 Test count went from 59 to 63, all green.
+
+---
+
+## Dev console + persist v3 hard reset
+
+Two related threads: the rewards catalogue grew and shifted (IKEA
+cost bumped, IKEA / Cyta swapped, Cinema Ticket added) — but those
+edits were invisible at runtime because Zustand's `persist`
+middleware kept rehydrating a v2 snapshot from `localStorage` that
+still held the previous seed. And the broader friction motivating
+this round was that there is no in-UI way to twiddle state during
+thesis demos, so every "what if XP were 2000" question meant a
+code edit and a restart.
+
+### 1. Persist version 3: full re-seed on migrate
+
+`useAppStore`'s persist config bumps to `version: 3`. The migrate
+now replaces every persisted slice (`currentUserId`, `users`,
+`reports`, `rewards`, `redeemedVouchers`, `bannedUsernames`,
+`selectedDistrict`) with the values from the mockData seeds plus
+the in-file `initialRedeemedVouchers`. The previous v1 → v2
+migrate only re-seeded `users` and `rewards`, which was enough to
+push the renewed IKEA image, but not enough to clean up downstream
+state that had diverged on existing clients (custom reports, prior
+redemptions, drained XP). v3 takes the simpler "throw it all away"
+stance — fine for a thesis prototype where nothing in persisted
+state is precious.
+
+`AppState` was promoted from a local interface to an `export` so
+the dev console helpers can type their `setState` calls against it.
+The `STORAGE_KEY` itself (`"crowdupkeep-state-v1"`) is unchanged —
+only the version metadata inside the persisted blob moves.
+
+### 2. Rewards catalogue updates (`mockData.ts`)
+
+- IKEA €100 Voucher `xpCost`: 1000 → 1500 (premium tier).
+- Cyta Internet Discount and IKEA swapped positions in the array,
+  so Cyta now lives at `id: 1` and IKEA at `id: 2`. The id swap is
+  load-bearing — anywhere else in the codebase that referenced
+  reward id 1 would now point at Cyta. A grep confirmed the only
+  hardcoded reward ids are 3 and 4 in `initialRedeemedVouchers`
+  (Coffee Shop + Cinema Tickets), neither of which moved.
+- Added a `Cinema Ticket` reward at `id: 5` with `stock: 0`.
+  Intentional zero stock — it surfaces the "out of stock" branch
+  in the rewards UI without having to redeem the other entries
+  down to zero by hand.
+
+### 3. `window.cu` dev console (`src/app/store/devConsole.ts`)
+
+A small surface attached to `window.cu` so the prototype is
+tweakable from DevTools without code edits between demo takes.
+The API exposes both the general escape hatch and a few
+convenience patchers for the slices we actually want to twiddle
+on the fly:
+
+- `cu.state()` — snapshot of the live store.
+- `cu.setState(updater)` — same shape as Zustand's `setState`,
+  accepts an object or a setter function.
+- `cu.patchUser(patch, userId?)` — defaults to the current user.
+- `cu.patchReward(id, patch)` and `cu.patchReport(id, patch)`.
+- `cu.reset()` — removes `crowdupkeep-state-v1` from
+  `localStorage` and reloads. Same effect as the v3 migration but
+  on demand.
+- `cu.store` — the raw Zustand store for power use (`subscribe`,
+  `getState`, etc.).
+
+The module is loaded for its side effect from `main.tsx`. On
+boot it prints a one-line `[cu] dev console ready…` hint to the
+console so the helpers are discoverable. No production code path
+imports from `devConsole.ts`; the only runtime contact is the
+`window.cu = api` assignment.

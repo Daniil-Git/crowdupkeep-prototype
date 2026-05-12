@@ -184,19 +184,19 @@ export const seedReports: UiReport[] = [
 export const seedRewards: UiReward[] = [
   {
     id: 1,
-    title: "IKEA €100 Voucher",
-    description: "Spend on any IKEA products.",
-    xpCost: 1000,
-    stock: 3,
-    imageUrl: "https://images.unsplash.com/photo-1567711601167-cd0efb1f8a99?w=400",
-  },
-  {
-    id: 2,
     title: "Cyta Internet Discount",
     description: "20% off for 3 months.",
     xpCost: 1000,
-    stock: 5,
+    stock: 3,
     imageUrl: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400",
+  },
+  {
+    id: 2,
+    title: "IKEA €100 Voucher",
+    description: "Spend on any IKEA products.",
+    xpCost: 1500,
+    stock: 5,
+    imageUrl: "https://images.unsplash.com/photo-1567711601167-cd0efb1f8a99?w=400",
   },
   {
     id: 3,
@@ -212,6 +212,14 @@ export const seedRewards: UiReward[] = [
     description: "Two tickets for any movie at K-Cineplex.",
     xpCost: 750,
     stock: 8,
+    imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400",
+  },
+  {
+    id: 5,
+    title: "Cinema Ticket",
+    description: "1 ticket for any movie at K-Cineplex.",
+    xpCost: 350,
+    stock: 0,
     imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400",
   },
 ];

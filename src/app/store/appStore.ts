@@ -76,7 +76,7 @@ export interface RedeemedVoucher {
   redeemedAt: string;
 }
 
-interface AppState {
+export interface AppState {
   currentUserId: number;
   users: UiUser[];
   reports: UiReport[];
@@ -374,8 +374,26 @@ export const STORAGE_KEY = "crowdupkeep-state-v1";
 export const useAppStore = create<AppState>()(
   persist(stateCreator, {
     name: STORAGE_KEY,
-    version: 1,
+    version: 3,
     storage: createJSONStorage(safeStorage),
+    // Hard reset for any client below v3: drop persisted reports,
+    // redeemed vouchers, bans, etc. and rehydrate everything from the
+    // mockData seeds. Bumped to pick up xpCost / image edits in
+    // seedRewards that would otherwise be shadowed by stale state.
+    migrate: (_persistedState, fromVersion) => {
+      if (fromVersion < 3) {
+        return {
+          currentUserId: 7,
+          users: seedUsers,
+          reports: seedReports,
+          rewards: seedRewards,
+          redeemedVouchers: initialRedeemedVouchers,
+          bannedUsernames: [],
+          selectedDistrict: ALL_LOCATIONS,
+        } as unknown as AppState;
+      }
+      return _persistedState as AppState;
+    },
     // Only persist data, not the function selectors. Functions are
     // re-attached on every store creation by the state creator.
     partialize: (state) => ({
