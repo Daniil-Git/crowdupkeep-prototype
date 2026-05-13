@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Trophy, Flame, Crown, Medal, Award } from "lucide-react";
 import { useAppStore } from "../store/appStore";
@@ -5,9 +6,22 @@ import { useAppStore } from "../store/appStore";
 export function Leaderboard() {
   const navigate = useNavigate();
   const users = useAppStore((s) => s.users);
+  const bannedUsernames = useAppStore((s) => s.bannedUsernames);
   const me = useAppStore((s) => s.getCurrentUser());
 
-  const ranked = [...users].sort((a, b) => b.xp - a.xp || b.streak - a.streak);
+  // Banned authors are already suppressed in the Nearby popup and the
+  // admin moderation flow; the leaderboard would otherwise still grant
+  // them a podium and an XP brag. Filter first, sort second, so ranks
+  // are computed on the surviving set (the user immediately below a
+  // banned author actually moves up a position, which is the desired
+  // moderation outcome).
+  const ranked = useMemo(
+    () =>
+      users
+        .filter((u) => !bannedUsernames.includes(u.username))
+        .sort((a, b) => b.xp - a.xp || b.streak - a.streak),
+    [users, bannedUsernames],
+  );
   const myRank = ranked.findIndex((u) => u.id === me.id) + 1;
   const nextUser = myRank > 1 ? ranked[myRank - 2] : null;
 

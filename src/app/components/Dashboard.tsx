@@ -20,11 +20,14 @@ export function Dashboard() {
   const [showNotification, setShowNotification] = useState(false);
 
   useEffect(() => {
-    // Read latest store state at trigger time (not at mount) so a district
-    // switch in the 3-second window is respected. If there's nothing
-    // eligible for the active filter, we never open the popup at all —
-    // the overlay's render gate is a backstop, not the only line of
-    // defence.
+    // Re-arm the 3-second trigger every time the active district
+    // changes. Without `selectedDistrict` in the deps, the user could
+    // dismiss the popup, switch to a district with pending issues, and
+    // never see it again until a full reload — the timer only fired
+    // once at mount. Reading the latest store state inside the
+    // callback (vs. closing over `selectedDistrict` directly) keeps
+    // the check honest if the user re-selects a district mid-window
+    // or a report's status changes between mount and trigger.
     const timer = setTimeout(() => {
       const s = useAppStore.getState();
       const me = s.getCurrentUser();
@@ -36,7 +39,7 @@ export function Dashboard() {
       }
     }, 3000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [selectedDistrict]);
 
   // The district filter intentionally only narrows "My Reports" too — when
   // the user picks "Molos" they expect to see only their Molos issues

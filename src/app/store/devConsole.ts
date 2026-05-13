@@ -44,13 +44,36 @@ const api = {
     }));
   },
 
-  // Patch a report by id. Example:
+  // Patch a report by id. Examples:
   //   cu.patchReport(101, { status: "solved", difficulty: 5 })
+  //   cu.patchReport(1, { rewardId: undefined })  // unlink the reward
+  //
+  // Throws if `reportId` is not in the store — a silent no-op would
+  // pollute downstream state (popup picker, persisted snapshot) when
+  // the demo operator mistypes an id. An explicit error makes the
+  // mistake visible in the console.
+  //
+  // For `rewardId`, both `undefined` and `null` are treated as
+  // "unlink": the key is fully removed from the report instead of
+  // being left as `undefined`. This keeps the persisted JSON clean
+  // (no `"rewardId": null` lingering in localStorage) and means the
+  // `report.rewardId == null` branch in getRewardStatusForReport
+  // falls through to the global-stock rule as intended.
   patchReport: (reportId: number, patch: Partial<UiReport>) => {
+    const exists = useAppStore.getState().reports.some((r) => r.id === reportId);
+    if (!exists) {
+      throw new Error(
+        `[cu] patchReport: no report with id=${reportId}. Use cu.state().reports to see valid ids.`,
+      );
+    }
+    const unlinkReward = "rewardId" in patch && patch.rewardId == null;
     useAppStore.setState((s) => ({
-      reports: s.reports.map((r) =>
-        r.id === reportId ? { ...r, ...patch } : r,
-      ),
+      reports: s.reports.map((r) => {
+        if (r.id !== reportId) return r;
+        const next: UiReport = { ...r, ...patch };
+        if (unlinkReward) delete next.rewardId;
+        return next;
+      }),
     }));
   },
 

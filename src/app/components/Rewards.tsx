@@ -60,28 +60,59 @@ export function Rewards() {
         <div className="grid grid-cols-1 gap-4">
           {rewards.map((reward) => {
             const canAfford = me.xp >= reward.xpCost;
+            const outOfStock = reward.stock === 0;
+            // Both "out of stock" and "not enough XP" are disabled
+            // states — the card content (title, cost, stock count)
+            // fades to opacity-60 in either case so the two read as
+            // siblings in the "unavailable right now" family. The
+            // *differentiator* lives on the image: an out-of-stock
+            // reward is a hard, catalogue-wide lock (nothing the user
+            // can do from this surface), so the image gets a
+            // `grayscale` filter and reads as visually inert. An
+            // affordability lock is soft — earn more XP and it opens
+            // — so the image stays in colour to keep the incentive
+            // visible. The overlay chip remains the labelled signpost
+            // for the *why*.
+            const disabled = outOfStock || !canAfford;
             return (
               <div
                 key={reward.id}
                 className={`border rounded-lg overflow-hidden ${
-                  canAfford ? "border-[#4CAF50]" : "border-gray-200"
+                  outOfStock
+                    ? "border-gray-200 bg-gray-50"
+                    : canAfford
+                      ? "border-[#4CAF50]"
+                      : "border-gray-200"
                 }`}
               >
                 <div className="relative h-32 bg-gray-100">
                   <img
                     src={reward.imageUrl}
                     alt={reward.title}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${
+                      outOfStock ? "grayscale" : ""
+                    }`}
                   />
-                  {!canAfford && (
+                  {/* Out-of-stock takes precedence over insufficient XP —
+                      affordability is moot if the reward can't be redeemed
+                      regardless. Same darkening + chip styling so the two
+                      unavailable states read as siblings; the chip text
+                      labels the difference. */}
+                  {outOfStock ? (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <div className="bg-white/90 px-3 py-1 rounded-full text-sm">
+                        Out Of Stock
+                      </div>
+                    </div>
+                  ) : !canAfford ? (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <div className="bg-white/90 px-3 py-1 rounded-full text-sm">
                         Need {reward.xpCost - me.xp} more XP
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
-                <div className="p-4">
+                <div className={`p-4 ${disabled ? "opacity-60" : ""}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div>
                       <h4 className="mb-1">{reward.title}</h4>
@@ -99,7 +130,7 @@ export function Rewards() {
                         size="sm"
                         onClick={() => setSelectedReward(reward.id)}
                         disabled={!canAfford || reward.stock === 0}
-                        className={canAfford ? "bg-[#4CAF50] hover:bg-[#388E3C]" : ""}
+                        className={canAfford && !disabled ? "bg-[#4CAF50] hover:bg-[#388E3C]" : ""}
                       >
                         Redeem
                       </Button>

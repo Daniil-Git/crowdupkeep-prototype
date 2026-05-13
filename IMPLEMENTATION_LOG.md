@@ -814,3 +814,134 @@ report without a rewardId* instead of hardcoding report id 1
 change — only the fixture that satisfies the "unlinked" precondition.
 
 Test count went from 63 to 75 (60 active + 15 DB-skipped).
+
+---
+
+## Reward / leaderboard polish + dev guardrails + Node 22 pin
+
+A grab bag of small things, each motivated by something the user
+hit while clicking through the prototype: the Pizza Hut card
+looked clickable when it wasn't, the moderation tools didn't
+reach the leaderboard, the dev console silently swallowed
+typos, the Nearby popup wouldn't re-open without a reload, and
+the test suite was permanently 15 short on Node 24.
+
+### 1. Out-of-stock visual overlay + consistent disabled treatment (`Rewards.tsx`)
+
+The "Need X more XP" overlay was already doing the right thing
+for affordability-gated rewards: full-card `bg-black/40`
+darkening with a white-pill chip in the middle. Out-of-stock
+rewards (Pizza Hut at id 5) had no such treatment — they looked
+identical to in-stock cards but their Redeem button was just
+quietly disabled.
+
+The two states are now visual siblings *and* visually
+distinguishable. A `disabled = outOfStock || !canAfford` flag
+fades the card's content area (title, description, XP cost,
+"N left", Redeem button) to `opacity-60` for both states — so a
+quick glance instantly reads "unavailable right now" regardless
+of which lock is active. The chip overlay is the consistent
+sibling treatment.
+
+The *differentiator* lives on the image:
+
+- **Out of stock** is a hard, catalogue-wide lock — the user
+  cannot unlock it from this surface — so the image gets a
+  `grayscale` filter to read as visually inert. The card
+  background also picks up `bg-gray-50` and the border stays
+  gray even if the user could otherwise afford the price.
+- **Affordability locked** is a soft lock — earn more XP and
+  the reward opens — so the image keeps its full colour to
+  preserve the incentive. Only the content area fades.
+
+Affordability is moot when the reward isn't redeemable at all,
+so the chip ternary still prefers stock messaging over XP
+messaging when both are true. The Redeem button continues to be
+`disabled` on `!canAfford || reward.stock === 0` (unchanged) —
+the new styling is purely visual reinforcement of state the
+button was already signalling.
+
+### 2. Banned users dropped from the Leaderboard (`Leaderboard.tsx`)
+
+Banned authors were already suppressed in the Nearby popup
+(`bannedUsernames.includes(r.createdByName)`) and in the admin
+moderation surface. The leaderboard was the one place a banned
+spammer could still hold a podium spot and brag about their XP.
+
+`useMemo` over `users.filter(...).sort(...)` — filter first so
+ranks are computed on the surviving set. The user immediately
+below a banned author actually moves up a position, which is
+the desired moderation outcome (not just hiding the row but
+collapsing the gap).
+
+### 3. `cu.patchReport` guardrails (`devConsole.ts`)
+
+Two ambiguities the demo operator could trip over silently:
+
+- **Unknown id.** `cu.patchReport(9999, { ... })` previously
+  no-op'd: the `.map` left every report untouched and persist
+  wrote the same array back. Now an explicit `Error` with a
+  hint to `cu.state().reports` for valid ids.
+- **Unlinking a reward.** Passing `rewardId: undefined` (or
+  `null`) used to set the field to `undefined`, which JSON
+  drops on persist and leaves `"rewardId": null` lingering on
+  some shapes. The branch now detects "`rewardId` in patch and
+  patch.rewardId == null" and `delete`s the key entirely. End
+  result: the report is back to truly unlinked, and the
+  global-stock fallback in `getRewardStatusForReport` kicks in
+  exactly as if `rewardId` had never been set.
+
+`patchUser` and `patchReward` were left as-is on purpose —
+they don't share the same "stale fk" failure mode and the
+typo-on-id case is less load-bearing for either.
+
+### 4. Nearby popup re-triggers on district re-select (`Dashboard.tsx`)
+
+The 3-second timer's `useEffect` had an empty deps array, so
+it fired exactly once at mount. If the user dismissed the
+popup and then changed districts to one with pending issues,
+the popup wouldn't reappear until a full page reload —
+fundamentally a stale-closure bug masked by the page lifecycle.
+
+Adding `selectedDistrict` to the deps re-arms a fresh 3-second
+timer on every district change. The callback still reads
+`useAppStore.getState()` synchronously rather than closing
+over the dep, so an in-flight district re-selection mid-timer
+is also respected. Rapid switches are naturally debounced —
+the cleanup `clearTimeout` cancels the prior timer before each
+new one schedules, so only the last district's timer fires.
+
+The NotificationOverlay's internal "open && !nearby →
+auto-close" effect remains as the rendering-side backstop —
+nothing about that contract changed.
+
+### 5. `.nvmrc` pin to Node 22 + lockfile reformat
+
+A two-line file at the repo root: `22\n`. nvm reads it on
+`nvm use` / `nvm install` and snaps to the latest installed
+Node 22.x. No `engines` field, no postinstall hook, no
+package.json change, no shell-rc touched — purely declarative,
+opt-in via nvm. Running `nvm use` without Node 22 installed
+prompts the user to `nvm install`; running it after install
+flips the version for the current shell only.
+
+Effect on the test suite: the Prisma 6 CLI's bundled
+`\uXXXX` escape no longer trips Node 22's parser. The
+auto-skip shim in `api.test.ts` (`prismaCliWorks` probe)
+auto-enables the 15 DB-backed describes once the CLI launches
+successfully, so no test-file change was needed.
+
+The accompanying `package-lock.json` diff (63 deletions, no
+additions, all in optional-dep entries under `node_modules/
+@rollup/rollup-*`) is npm 10.9.7 — the npm bundled with Node
+22 — writing the lockfile without the `"libc": ["glibc"|"musl"]`
+metadata that npm under Node 24 included. No package versions
+or tree shape changed; this is a one-time format harmonisation
+that ships alongside the .nvmrc.
+
+### Test suite under Node 22
+
+Same 75 cases, no skips, no Prisma warning. The 15 DB-backed
+tests that were red-then-skipped during the v3/v4 rounds are
+now running every `npm test`. No test code changed — the shim
+is a probe, not a fixed list.
