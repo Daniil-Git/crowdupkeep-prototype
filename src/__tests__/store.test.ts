@@ -1,5 +1,10 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { useAppStore } from "@/app/store/appStore";
+import {
+  STORAGE_VERSION,
+  freshSeedState,
+  migrateState,
+  useAppStore,
+} from "@/app/store/appStore";
 import { hasNearbyReport, pickNearbyReport } from "@/lib/nearby";
 import { ALL_LOCATIONS, addressToDistrict } from "@/lib/districts";
 import { proximityRewardLabel } from "@/app/components/NotificationOverlay";
@@ -157,8 +162,16 @@ describe("useAppStore", () => {
 });
 
 describe("getRewardStatusForReport", () => {
-  it("returns xpFor(difficulty) credits and 'available' for an open report when stock exists", () => {
-    const report = useAppStore.getState().reports.find((r) => r.id === 1)!;
+  // Helper: find the first pending seed report that is *not* linked to
+  // a specific reward, so it exercises the global-inventory fallback
+  // branch instead of the new per-report `rewardId` branch.
+  const firstUnlinkedPending = () =>
+    useAppStore.getState().reports.find(
+      (r) => r.status === "pending" && r.rewardId == null,
+    )!;
+
+  it("returns xpFor(difficulty) credits and 'available' for an unlinked pending report when global stock exists", () => {
+    const report = firstUnlinkedPending();
     const status = useAppStore.getState().getRewardStatusForReport(report.id);
     expect(status).not.toBeNull();
     expect(status!.xpCost).toBe(report.difficulty * 50);
@@ -172,13 +185,13 @@ describe("getRewardStatusForReport", () => {
     expect(status!.available).toBe(false);
   });
 
-  it("flags a report as not available when reward inventory is exhausted", () => {
+  it("flags an unlinked report as not available when global reward inventory is exhausted", () => {
     // Drain every reward's stock; the popup should switch to its
     // "challenge only" copy because earning XP can't be redeemed.
     useAppStore.setState((s) => ({
       rewards: s.rewards.map((r) => ({ ...r, stock: 0 })),
     }));
-    const report = useAppStore.getState().reports.find((r) => r.status !== "solved")!;
+    const report = firstUnlinkedPending();
     const status = useAppStore.getState().getRewardStatusForReport(report.id);
     expect(status!.available).toBe(false);
     expect(status!.stock).toBe(0);
@@ -192,6 +205,46 @@ describe("getRewardStatusForReport", () => {
   it("accepts a string id (for params arriving from useParams())", () => {
     const status = useAppStore.getState().getRewardStatusForReport("1");
     expect(status).not.toBeNull();
+  });
+
+  // --- Per-report rewardId linkage (new in v4) ----------------------
+
+  it("uses the linked reward's stock alone when a report has a rewardId, ignoring global inventory", () => {
+    // Seed report id 1 is linked to reward id 5 (Pizza Hut, stock: 0).
+    // Other rewards (Cyta / IKEA / etc.) hold plenty of stock, but
+    // that should not bleed through — a per-report link is meant to
+    // pin the popup to that specific reward's availability.
+    const status = useAppStore.getState().getRewardStatusForReport(1);
+    expect(status).not.toBeNull();
+    expect(status!.stock).toBe(0);
+    expect(status!.available).toBe(false);
+  });
+
+  it("flips a linked report back to available when its linked reward is restocked", () => {
+    useAppStore.setState((s) => ({
+      rewards: s.rewards.map((r) =>
+        r.id === 5 ? { ...r, stock: 3 } : r,
+      ),
+    }));
+    const status = useAppStore.getState().getRewardStatusForReport(1);
+    expect(status!.stock).toBe(3);
+    expect(status!.available).toBe(true);
+  });
+
+  it("falls back to global stock when the linked rewardId points at a missing reward (stale link)", () => {
+    // Simulate a half-broken state: a report holds a stale rewardId
+    // that no longer exists in the catalogue. The popup should not
+    // crash — it should degrade to the global-inventory rule so the
+    // user still sees a sensible state.
+    useAppStore.setState((s) => ({
+      reports: s.reports.map((r) =>
+        r.id === 4 ? { ...r, rewardId: 9999 } : r,
+      ),
+    }));
+    const status = useAppStore.getState().getRewardStatusForReport(4);
+    expect(status).not.toBeNull();
+    expect(status!.stock).toBeGreaterThan(0);
+    expect(status!.available).toBe(true);
   });
 });
 
@@ -316,5 +369,108 @@ describe("pickNearbyReport (lib/nearby)", () => {
     }));
     const picked = pickNearbyReport(reports, here, "Old Port");
     expect(picked).toBeNull();
+  });
+});
+
+describe("seed catalogue (v4 invariants)", () => {
+  // These pin down the shape contract the Nearby popup + dev console
+  // were built against. If any of them drift, the persist version
+  // should bump and the migrate function should rehydrate.
+
+  it("ends the rewards array with the 0-stock Pizza Hut voucher and a unique image", () => {
+    const { rewards } = useAppStore.getState();
+    const last = rewards[rewards.length - 1];
+    expect(last.id).toBe(5);
+    expect(last.title).toBe("Pizza Hut €20 Voucher");
+    expect(last.stock).toBe(0);
+    // Image URL must not duplicate any other entry — verifying it in
+    // the seed prevents an easy copy-paste regression where two
+    // rewards share the same Unsplash photo.
+    const otherUrls = rewards.slice(0, -1).map((r) => r.imageUrl);
+    expect(otherUrls).not.toContain(last.imageUrl);
+  });
+
+  it("links pending report id 1 to the 0-stock Pizza Hut voucher (id 5)", () => {
+    const report = useAppStore.getState().reports.find((r) => r.id === 1)!;
+    expect(report.status).toBe("pending");
+    expect(report.rewardId).toBe(5);
+  });
+
+  it("makes report 1 reliably surface the 'XP challenge' label via proximityRewardLabel", () => {
+    const status = useAppStore.getState().getRewardStatusForReport(1)!;
+    const label = proximityRewardLabel(status.xpCost, status);
+    expect(label).toBe(`+${status.xpCost} XP challenge`);
+  });
+
+  it("pickNearbyReport(All Locations, no origin) lands on the linked report 1", () => {
+    // The Dashboard's first-load case: no geolocation yet, no district
+    // filter active. The picker should hand back report 1, which is
+    // exactly the report wired to surface the XP-challenge branch.
+    const reports = useAppStore.getState().reports;
+    const picked = pickNearbyReport(reports, undefined, ALL_LOCATIONS);
+    expect(picked).not.toBeNull();
+    // No origin → bare candidate, no distance wrapper.
+    if (picked && "report" in picked) {
+      throw new Error("did not expect distance metadata");
+    }
+    expect((picked as { id: number }).id).toBe(1);
+  });
+
+  it("Old Port pending report stays available (other districts unaffected by report 1's link)", () => {
+    // Sanity: linking report 1 to an out-of-stock reward must not
+    // accidentally drag other districts' reports into "unavailable".
+    const oldPort = useAppStore.getState().reports.find(
+      (r) => r.address.toLowerCase().includes("old port") && r.status === "pending",
+    )!;
+    const status = useAppStore.getState().getRewardStatusForReport(oldPort.id)!;
+    expect(status.available).toBe(true);
+  });
+});
+
+describe("persist migrate (v4 hard reset)", () => {
+  // The migrate function is the only way persisted snapshots from
+  // earlier devConsole / catalogue shapes get cleaned up on a real
+  // user's browser. Exercising it directly is the cheap way to keep
+  // it honest without spelunking through Zustand's internal hydrate.
+
+  it("STORAGE_VERSION is the current target", () => {
+    expect(STORAGE_VERSION).toBe(4);
+  });
+
+  it("freshSeedState returns the canonical 'just installed' snapshot", () => {
+    const seed = freshSeedState();
+    expect(seed.currentUserId).toBe(7);
+    expect(seed.bannedUsernames).toEqual([]);
+    expect(seed.selectedDistrict).toBe(ALL_LOCATIONS);
+    expect(seed.reports.length).toBeGreaterThan(0);
+    expect(seed.rewards.length).toBeGreaterThan(0);
+  });
+
+  it("any version below STORAGE_VERSION triggers a full reseed", () => {
+    // Simulate a v1 client with a wildly diverged snapshot — drained
+    // users, no rewards, banned everyone, parked on a weird district.
+    const stale = {
+      currentUserId: 999,
+      users: [],
+      reports: [],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: ["spammer"],
+      selectedDistrict: "Centre",
+    };
+    const migrated = migrateState(stale, 1);
+    expect(migrated.users.length).toBeGreaterThan(0);
+    expect(migrated.rewards.length).toBeGreaterThan(0);
+    expect(migrated.currentUserId).toBe(7);
+    expect(migrated.bannedUsernames).toEqual([]);
+    // And the Pizza Hut link survives the migrate.
+    const reportOne = migrated.reports.find((r) => r.id === 1)!;
+    expect(reportOne.rewardId).toBe(5);
+  });
+
+  it("leaves an already-current snapshot untouched", () => {
+    const current = freshSeedState();
+    const migrated = migrateState(current, STORAGE_VERSION);
+    expect(migrated).toBe(current);
   });
 });

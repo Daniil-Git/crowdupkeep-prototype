@@ -72,9 +72,13 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
     return `~${distanceKm.toFixed(1)}km away`;
   })();
 
-  const isAvailable = rewardStatus?.available ?? true;
-  const disabled = !isAvailable;
-
+  // View Issue is enabled whenever the popup is showing. Reward
+  // availability is a property of the *catalogue*, not of the report
+  // itself — the underlying issue is still viewable (and solvable for
+  // XP) even when there is no redeemable voucher behind it. The early
+  // `if (!nearby) return null` above is the actual viewability gate:
+  // if the report couldn't be opened, the popup wouldn't be on screen
+  // in the first place.
   const handleView = () => {
     onOpenChange(false);
     navigate(`/report/${nearby.id}`);
@@ -119,8 +123,7 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
             </Button>
             <Button
               onClick={handleView}
-              disabled={disabled}
-              className="flex-1 bg-white text-[#FF5722] hover:bg-white/90 disabled:opacity-60"
+              className="flex-1 bg-white text-[#FF5722] hover:bg-white/90"
             >
               View Issue
             </Button>

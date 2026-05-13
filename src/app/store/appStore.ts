@@ -47,6 +47,12 @@ export interface UiReport {
   photos: string[];
   comments: ReportComment[];
   solutions: ReportSolution[];
+  // Optional link to a specific reward in the catalogue. When set, the
+  // proximity popup's "available" check uses that reward's stock alone
+  // instead of the global inventory total — so a report tied to a 0-stock
+  // voucher deterministically renders the "XP challenge" copy regardless
+  // of how much stock the rest of the catalogue holds.
+  rewardId?: number;
 }
 
 export interface UiUser {
@@ -343,14 +349,27 @@ const stateCreator: StateCreator<AppState> = (set, get) => ({
     const id = typeof reportId === "string" ? Number(reportId) : reportId;
     const report = get().reports.find((r) => r.id === id);
     if (!report) return null;
-    // Total redeemable inventory across all rewards. The popup uses this
-    // to decide whether earning XP here is meaningful — if the catalogue
-    // is empty, "earn XP + reward" is a hollow promise.
-    const totalStock = get().rewards.reduce((acc, r) => acc + r.stock, 0);
+    // Stock the popup pitches against. Two-tier rule:
+    //   1. If the report has an explicit `rewardId`, use that single
+    //      reward's stock — a report tied to the 0-stock Pizza Hut
+    //      voucher should render "XP challenge" even when the rest of
+    //      the catalogue is fully stocked.
+    //   2. Otherwise fall back to total redeemable inventory across
+    //      all rewards — the old global-catalogue rule.
+    // A linked rewardId that no longer matches any reward (stale data)
+    // falls through to the global total so the popup degrades to the
+    // unlinked behaviour instead of crashing.
+    const linkedReward =
+      report.rewardId != null
+        ? get().rewards.find((r) => r.id === report.rewardId)
+        : null;
+    const stock = linkedReward
+      ? linkedReward.stock
+      : get().rewards.reduce((acc, r) => acc + r.stock, 0);
     return {
       xpCost: xpFor(report.difficulty),
-      available: report.status !== "solved" && totalStock > 0,
-      stock: totalStock,
+      available: report.status !== "solved" && stock > 0,
+      stock,
     };
   },
 });
@@ -370,30 +389,55 @@ const safeStorage = (): StateStorage =>
     : noopStorage;
 
 export const STORAGE_KEY = "crowdupkeep-state-v1";
+export const STORAGE_VERSION = 4;
+
+// Returns the "fresh from seeds" snapshot used both at first hydrate and
+// on every hard-reset migration. Exposed for tests so the migrate
+// behaviour can be exercised without spelunking through persist
+// internals.
+export function freshSeedState(): Pick<
+  AppState,
+  | "currentUserId"
+  | "users"
+  | "reports"
+  | "rewards"
+  | "redeemedVouchers"
+  | "bannedUsernames"
+  | "selectedDistrict"
+> {
+  return {
+    currentUserId: 7,
+    users: seedUsers,
+    reports: seedReports,
+    rewards: seedRewards,
+    redeemedVouchers: initialRedeemedVouchers,
+    bannedUsernames: [],
+    selectedDistrict: ALL_LOCATIONS,
+  };
+}
+
+// Hard reset for any client below the current STORAGE_VERSION: drop
+// persisted reports, redeemed vouchers, bans, etc. and rehydrate
+// everything from the mockData seeds. Bumped each time seedReports /
+// seedRewards changes shape in a way that breaks older snapshots —
+// e.g. v4 added the `rewardId` field on reports and a renamed
+// 0-stock voucher.
+export function migrateState(
+  persistedState: unknown,
+  fromVersion: number,
+): AppState {
+  if (fromVersion < STORAGE_VERSION) {
+    return freshSeedState() as unknown as AppState;
+  }
+  return persistedState as AppState;
+}
 
 export const useAppStore = create<AppState>()(
   persist(stateCreator, {
     name: STORAGE_KEY,
-    version: 3,
+    version: STORAGE_VERSION,
     storage: createJSONStorage(safeStorage),
-    // Hard reset for any client below v3: drop persisted reports,
-    // redeemed vouchers, bans, etc. and rehydrate everything from the
-    // mockData seeds. Bumped to pick up xpCost / image edits in
-    // seedRewards that would otherwise be shadowed by stale state.
-    migrate: (_persistedState, fromVersion) => {
-      if (fromVersion < 3) {
-        return {
-          currentUserId: 7,
-          users: seedUsers,
-          reports: seedReports,
-          rewards: seedRewards,
-          redeemedVouchers: initialRedeemedVouchers,
-          bannedUsernames: [],
-          selectedDistrict: ALL_LOCATIONS,
-        } as unknown as AppState;
-      }
-      return _persistedState as AppState;
-    },
+    migrate: migrateState,
     // Only persist data, not the function selectors. Functions are
     // re-attached on every store creation by the state creator.
     partialize: (state) => ({

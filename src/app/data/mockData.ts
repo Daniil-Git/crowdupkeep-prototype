@@ -74,6 +74,10 @@ export const seedReports: UiReport[] = [
       c(2, 8, "Thanks for confirming!", 1, "2026-04-14T11:15:00Z"),
     ],
     solutions: [],
+    // Linked to the 0-stock Pizza Hut voucher so the Nearby popup
+    // surfaces the "XP challenge" copy reliably for this report —
+    // useful for thesis demos of the unavailable-reward branch.
+    rewardId: 5,
   },
   {
     id: 2,
@@ -216,10 +220,10 @@ export const seedRewards: UiReward[] = [
   },
   {
     id: 5,
-    title: "Cinema Ticket",
-    description: "1 ticket for any movie at K-Cineplex.",
-    xpCost: 350,
+    title: "Pizza Hut €20 Voucher",
+    description: "Redeemable at any Pizza Hut Cyprus branch.",
+    xpCost: 400,
     stock: 0,
-    imageUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400",
+    imageUrl: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400",
   },
 ];
