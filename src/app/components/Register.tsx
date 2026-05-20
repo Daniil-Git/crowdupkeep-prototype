@@ -1,38 +1,50 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Camera, Upload } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Progress } from "./ui/progress";
 import { toast } from "sonner";
+import { IdentityInput } from "./IdentityInput";
+import { useAppStore } from "../store/appStore";
+import { CypriotIdFormatError } from "@/lib/cypriotId";
 
+// Register flow rewired to feed the citizen ID through the
+// canonicalise-then-PBKDF2 pipeline. The raw ID lives only in
+// component-local state inside <IdentityInput />; once valid, the
+// canonical 10-digit string is handed to this component via the
+// `setCanonical` setter and immediately consumed by `register(...)`
+// in the store, which derives the dual nullifiers and discards the
+// canonical input.
 export function Register() {
   const navigate = useNavigate();
+  const register = useAppStore((s) => s.register);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [idPhoto, setIdPhoto] = useState<File | null>(null);
-  const [progress, setProgress] = useState(0);
+  const [canonical, setCanonical] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && username && password && idPhoto) {
-      // Simulate progress
-      setProgress(0);
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            toast.success("Account created and verified!");
-            setTimeout(() => navigate("/"), 1000);
-            return 100;
-          }
-          return prev + 10;
-        });
-      }, 100);
-    } else {
-      toast.error("Please fill all fields and upload ID photo");
+    if (!email || !username || !password || !canonical) {
+      toast.error("Please fill all fields and confirm your 10-digit ID");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // Password and canonical citizen ID both feed the dual-derivation:
+      //   identityNullifier ← PBKDF2(canonicalId, identity-salt)
+      //   loginNullifier    ← PBKDF2(password,    login-salt+username)
+      // The two are independent — leaking one cannot reveal the other.
+      await register({ username, password, rawCitizenId: canonical });
+      toast.success("Account created and verified!");
+      setTimeout(() => navigate("/dashboard"), 600);
+    } catch (err) {
+      if (err instanceof CypriotIdFormatError) toast.error(err.message);
+      else if (err instanceof Error) toast.error(err.message);
+      else toast.error("Registration failed");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -84,79 +96,18 @@ export function Register() {
             />
           </div>
 
-          <div>
-            <Label>Upload ID/DOB Photo</Label>
-            <div className="mt-1.5 border-2 border-dashed border-gray-300 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex-shrink-0">
-                  {idPhoto ? (
-                    <div className="w-16 h-16 rounded-lg bg-[#4CAF50] flex items-center justify-center text-white">
-                      ✓
-                    </div>
-                  ) : (
-                    <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
-                      <Camera className="w-8 h-8 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm mb-2">
-                    {idPhoto ? idPhoto.name : "No file selected"}
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => setIdPhoto(e.target.files?.[0] || null)}
-                      className="hidden"
-                      id="camera-upload"
-                    />
-                    <label htmlFor="camera-upload">
-                      <Button type="button" size="sm" variant="outline" asChild>
-                        <span className="cursor-pointer">
-                          <Camera className="w-4 h-4 mr-1" />
-                          Camera
-                        </span>
-                      </Button>
-                    </label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setIdPhoto(e.target.files?.[0] || null)}
-                      className="hidden"
-                      id="gallery-upload"
-                    />
-                    <label htmlFor="gallery-upload">
-                      <Button type="button" size="sm" variant="outline" asChild>
-                        <span className="cursor-pointer">
-                          <Upload className="w-4 h-4 mr-1" />
-                          Gallery
-                        </span>
-                      </Button>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {progress > 0 && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Verifying...</span>
-                <span>{progress}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-          )}
+          <IdentityInput
+            onCanonicalReady={setCanonical}
+            onCanonicalCleared={() => setCanonical(null)}
+            disabled={submitting}
+          />
 
           <Button
             type="submit"
             className="w-full bg-[#4CAF50] hover:bg-[#388E3C] text-white"
-            disabled={progress > 0 && progress < 100}
+            disabled={submitting || !canonical}
           >
-            Verify & Register
+            {submitting ? "Deriving identity…" : "Verify & Register"}
           </Button>
         </form>
       </div>

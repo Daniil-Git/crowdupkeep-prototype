@@ -427,26 +427,34 @@ describe("seed catalogue (v4 invariants)", () => {
   });
 });
 
-describe("persist migrate (v4 hard reset)", () => {
+describe("persist migrate (v7 — ownership-key wipe for the zero-knowledge proof rollout)", () => {
   // The migrate function is the only way persisted snapshots from
   // earlier devConsole / catalogue shapes get cleaned up on a real
   // user's browser. Exercising it directly is the cheap way to keep
   // it honest without spelunking through Zustand's internal hydrate.
 
   it("STORAGE_VERSION is the current target", () => {
-    expect(STORAGE_VERSION).toBe(4);
+    expect(STORAGE_VERSION).toBe(7);
   });
 
-  it("freshSeedState returns the canonical 'just installed' snapshot", () => {
+  it("freshSeedState returns the canonical 'just installed' snapshot (incl. identity defaults)", () => {
     const seed = freshSeedState();
     expect(seed.currentUserId).toBe(7);
     expect(seed.bannedUsernames).toEqual([]);
     expect(seed.selectedDistrict).toBe(ALL_LOCATIONS);
     expect(seed.reports.length).toBeGreaterThan(0);
     expect(seed.rewards.length).toBeGreaterThan(0);
+    // Identity slice defaults — newly added in v5, extended in v7.
+    expect(seed.username).toBeNull();
+    expect(seed.identityNullifier).toBeNull();
+    expect(seed.loginNullifier).toBeNull();
+    expect(seed.isAuthenticated).toBe(false);
+    expect(seed.ownershipPublicKey).toBeNull();
+    expect(seed.totpSecret).toBeNull();
+    expect(seed.adminVerified).toBe(false);
   });
 
-  it("any version below STORAGE_VERSION triggers a full reseed", () => {
+  it("fromVersion < 4 triggers a full reseed (old shape, nothing precious)", () => {
     // Simulate a v1 client with a wildly diverged snapshot — drained
     // users, no rewards, banned everyone, parked on a weird district.
     const stale = {
@@ -472,5 +480,105 @@ describe("persist migrate (v4 hard reset)", () => {
     const current = freshSeedState();
     const migrated = migrateState(current, STORAGE_VERSION);
     expect(migrated).toBe(current);
+  });
+
+  it("v4 → v7 MERGES identity defaults onto the existing snapshot (catalogue preserved)", () => {
+    // v4 had no identity fields. Existing users' reports / redemptions
+    // are still valid post-migration; only the new identity slots get
+    // initialised. This is what saves users from losing their state
+    // simply because the schema grew.
+    const v4Snapshot = {
+      currentUserId: 4,
+      users: [{ id: 4, username: "eco_defender", email: "x", xp: 999, streak: 2, avatar: "" }],
+      reports: [{ id: 1, title: "kept", description: "", difficulty: 1, status: "pending", geometry: { lat: 34.7, lng: 33 }, address: "x", createdById: 4, createdByName: "eco_defender", createdAt: "", photos: [], comments: [], solutions: [] }],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: ["someone"],
+      selectedDistrict: "Old Port",
+    };
+    const migrated = migrateState(v4Snapshot, 4);
+    // Catalogue / pre-existing data survives.
+    expect(migrated.currentUserId).toBe(4);
+    expect(migrated.users[0].username).toBe("eco_defender");
+    expect(migrated.reports[0].title).toBe("kept");
+    expect(migrated.bannedUsernames).toEqual(["someone"]);
+    expect(migrated.selectedDistrict).toBe("Old Port");
+    // New identity slots come up at their defaults.
+    expect(migrated.username).toBeNull();
+    expect(migrated.identityNullifier).toBeNull();
+    expect(migrated.loginNullifier).toBeNull();
+    expect(migrated.isAuthenticated).toBe(false);
+    expect(migrated.ownershipPublicKey).toBeNull();
+    expect(migrated.totpSecret).toBeNull();
+    expect(migrated.adminVerified).toBe(false);
+  });
+
+  it("v5 → v7 INVALIDATES the old citizen-ID-derived loginNullifier (forces re-register)", () => {
+    // The v5 loginNullifier was PBKDF2(canonicalCitizenId, ...). Under
+    // v6 it must be PBKDF2(password, salt+username). Any pre-existing
+    // v5 nullifier is the wrong shape and is the source of the
+    // username-only fast-path bug; on hydrate we wipe the entire
+    // identity slice so the user re-registers with a password.
+    const v5Snapshot = {
+      currentUserId: 7,
+      users: [],
+      reports: [],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: [],
+      selectedDistrict: ALL_LOCATIONS,
+      // Stale identity slots from v5 — must not survive.
+      username: "alice",
+      identityNullifier: "deadbeef".repeat(8),
+      loginNullifier: "cafebabe".repeat(8),
+      isAuthenticated: true,
+      totpSecret: "STALEBASE32",
+      adminVerified: true,
+    };
+    const migrated = migrateState(v5Snapshot, 5);
+    // Catalogue stuff preserved as-is.
+    expect(migrated.currentUserId).toBe(7);
+    expect(migrated.selectedDistrict).toBe(ALL_LOCATIONS);
+    // Every identity slot is back to its initial null/false default —
+    // there is no path for an old loginNullifier to bypass the
+    // password check in the v6 login flow.
+    expect(migrated.username).toBeNull();
+    expect(migrated.identityNullifier).toBeNull();
+    expect(migrated.loginNullifier).toBeNull();
+    expect(migrated.isAuthenticated).toBe(false);
+    expect(migrated.ownershipPublicKey).toBeNull();
+    expect(migrated.totpSecret).toBeNull();
+    expect(migrated.adminVerified).toBe(false);
+  });
+
+  it("v6 → v7 INVALIDATES a stored loginNullifier with no matching ownership key (forces re-register)", () => {
+    // v6 had a password-derived loginNullifier but NO ownership keypair.
+    // A v6 user dragging that snapshot into a v7 client would have the
+    // nullifier alone — which under v7 is no longer sufficient to
+    // authenticate, because the login flow now requires a signature
+    // verified against an ownership public key the v6 snapshot never
+    // generated. Wipe and force re-register.
+    const v6Snapshot = {
+      currentUserId: 7,
+      users: [],
+      reports: [],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: [],
+      selectedDistrict: ALL_LOCATIONS,
+      username: "alice",
+      identityNullifier: "deadbeef".repeat(8),
+      loginNullifier: "cafebabe".repeat(8),
+      isAuthenticated: true,
+      role: "citizen",
+      // No ownershipPublicKey — v6 didn't have it.
+      totpSecret: null,
+      adminVerified: false,
+    };
+    const migrated = migrateState(v6Snapshot, 6);
+    expect(migrated.username).toBeNull();
+    expect(migrated.loginNullifier).toBeNull();
+    expect(migrated.ownershipPublicKey).toBeNull();
+    expect(migrated.isAuthenticated).toBe(false);
   });
 });

@@ -9,17 +9,42 @@ import type {
 // Limassol, Cyprus
 export const LIMASSOL_CENTER = { lat: 34.7071, lng: 33.0226 };
 
+// Synthetic display-only nullifier strings for the admin registry view.
+// These are NOT real PBKDF2 outputs — they exist so the registry table
+// has anonymized, visually-distinct, 64-hex strings to render for the
+// seeded users (who never went through the live register flow). When
+// the actually-registered current user matches a row by username, the
+// registry projection in `lib/adminRegistry.ts` overlays the real
+// PBKDF2 nullifier from the identity slice in their place.
+function synthNullifier(kind: "identity" | "login", userId: number): string {
+  const head = (kind === "identity" ? "1d" : "10") + userId.toString(16).padStart(2, "0");
+  let out = head;
+  // Small deterministic LCG so the digits look random across users
+  // but reproduce identically across runs.
+  let seed = userId * 0x9e3779b9 + (kind === "identity" ? 0xdeadbeef : 0xcafebabe);
+  while (out.length < 64) {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    out += ((seed >>> 16) & 0xff).toString(16).padStart(2, "0");
+  }
+  return out.slice(0, 64);
+}
+
+const userIdent = (id: number) => ({
+  identityNullifierHex: synthNullifier("identity", id),
+  loginNullifierHex: synthNullifier("login", id),
+});
+
 export const seedUsers: UiUser[] = [
-  { id: 1, username: "civic_hero", email: "civic_hero@limassol.cy", xp: 3450, streak: 15, avatar: "https://i.pravatar.cc/150?img=1" },
-  { id: 2, username: "green_warrior", email: "green_warrior@limassol.cy", xp: 2980, streak: 12, avatar: "https://i.pravatar.cc/150?img=2" },
-  { id: 3, username: "city_champion", email: "city_champion@limassol.cy", xp: 2750, streak: 10, avatar: "https://i.pravatar.cc/150?img=3" },
-  { id: 4, username: "eco_defender", email: "eco_defender@limassol.cy", xp: 2340, streak: 8, avatar: "https://i.pravatar.cc/150?img=4" },
-  { id: 5, username: "clean_streets", email: "clean_streets@limassol.cy", xp: 2100, streak: 7, avatar: "https://i.pravatar.cc/150?img=5" },
-  { id: 6, username: "volunteers_cy", email: "volunteers_cy@limassol.cy", xp: 1490, streak: 9, avatar: "https://i.pravatar.cc/150?img=6" },
-  { id: 7, username: "you", email: "you@limassol.cy", xp: 1250, streak: 5, avatar: "https://i.pravatar.cc/150?img=7" },
-  { id: 8, username: "maria_k", email: "maria_k@limassol.cy", xp: 1120, streak: 4, avatar: "https://i.pravatar.cc/150?img=8" },
-  { id: 9, username: "john_d", email: "john_d@limassol.cy", xp: 980, streak: 3, avatar: "https://i.pravatar.cc/150?img=9" },
-  { id: 10, username: "alex_p", email: "alex_p@limassol.cy", xp: 850, streak: 6, avatar: "https://i.pravatar.cc/150?img=10" },
+  { id: 1, username: "civic_hero",     email: "civic_hero@limassol.cy",     xp: 3450, streak: 15, avatar: "https://i.pravatar.cc/150?img=1",  role: "citizen", ...userIdent(1)  },
+  { id: 2, username: "green_warrior",  email: "green_warrior@limassol.cy",  xp: 2980, streak: 12, avatar: "https://i.pravatar.cc/150?img=2",  role: "citizen", ...userIdent(2)  },
+  { id: 3, username: "city_champion",  email: "city_champion@limassol.cy",  xp: 2750, streak: 10, avatar: "https://i.pravatar.cc/150?img=3",  role: "admin",   ...userIdent(3)  },
+  { id: 4, username: "eco_defender",   email: "eco_defender@limassol.cy",   xp: 2340, streak: 8,  avatar: "https://i.pravatar.cc/150?img=4",  role: "citizen", ...userIdent(4)  },
+  { id: 5, username: "clean_streets",  email: "clean_streets@limassol.cy",  xp: 2100, streak: 7,  avatar: "https://i.pravatar.cc/150?img=5",  role: "citizen", ...userIdent(5)  },
+  { id: 6, username: "volunteers_cy",  email: "volunteers_cy@limassol.cy",  xp: 1490, streak: 9,  avatar: "https://i.pravatar.cc/150?img=6",  role: "citizen", ...userIdent(6)  },
+  { id: 7, username: "you",            email: "you@limassol.cy",            xp: 1250, streak: 5,  avatar: "https://i.pravatar.cc/150?img=7",  role: "admin",   ...userIdent(7)  },
+  { id: 8, username: "maria_k",        email: "maria_k@limassol.cy",        xp: 1120, streak: 4,  avatar: "https://i.pravatar.cc/150?img=8",  role: "citizen", ...userIdent(8)  },
+  { id: 9, username: "john_d",         email: "john_d@limassol.cy",         xp: 980,  streak: 3,  avatar: "https://i.pravatar.cc/150?img=9",  role: "citizen", ...userIdent(9)  },
+  { id: 10, username: "alex_p",        email: "alex_p@limassol.cy",         xp: 850,  streak: 6,  avatar: "https://i.pravatar.cc/150?img=10", role: "citizen", ...userIdent(10) },
 ];
 
 const c = (

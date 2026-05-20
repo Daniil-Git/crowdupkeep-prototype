@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Upload, Trophy, CheckCircle, Gift, TrendingUp, MapPin } from "lucide-react";
+import { ArrowLeft, Upload, Trophy, CheckCircle, Gift, TrendingUp, MapPin, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Badge } from "./ui/badge";
@@ -32,6 +32,7 @@ export function Profile() {
   const reports = useAppStore((s) => s.reports);
   const redeemedVouchers = useAppStore((s) => s.redeemedVouchers);
   const selectedDistrict = useAppStore((s) => s.selectedDistrict);
+  const logout = useAppStore((s) => s.logout);
   const [idPhoto, setIdPhoto] = useState<File | null>(null);
   // The Re-upload modal is controlled so the success handler can close it
   // explicitly. The previous uncontrolled DialogTrigger pattern left the
@@ -245,13 +246,38 @@ export function Profile() {
           </Dialog>
         </div>
 
-        <div className="pt-4 border-t">
+        <div className="pt-4 border-t space-y-3">
           <Button
             onClick={() => navigate("/admin")}
             variant="outline"
             className="w-full text-purple-700 border-purple-300"
           >
             Admin Dashboard (Demo)
+          </Button>
+
+          {/*
+            Logout button. Wired to the store's secure logout action:
+            clearStorage() on the persist middleware, identity slice
+            reset to nulls, sessionStorage swept, then a hard
+            window.location.replace('/') so the entire component tree
+            re-mounts (releasing blob URLs and any ephemeral
+            component-local state along the way). The toast is fired
+            on the same tick — the location.replace is async at the
+            browser level so the toast still has time to render before
+            the navigation tears the tree down. We don't call
+            navigate('/') here: that would race with the store's hard
+            navigation and produce a brief flash of an empty layout.
+          */}
+          <Button
+            onClick={() => {
+              toast.success("Logged out — local credentials cleared.");
+              logout();
+            }}
+            variant="outline"
+            className="w-full text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Log out
           </Button>
         </div>
       </div>

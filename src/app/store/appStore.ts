@@ -9,6 +9,11 @@ import {
   type LocationFilter,
 } from "@/lib/districts";
 import { LIMASSOL_CENTER, seedReports, seedRewards, seedUsers } from "../data/mockData";
+import {
+  createIdentitySlice,
+  identityInitialState,
+  type IdentitySlice,
+} from "./identitySlice";
 
 // In-browser state mirrors the Prisma schema closely so swapping the runtime
 // to a real API later is a search-and-replace, not a rewrite.
@@ -63,6 +68,15 @@ export interface UiUser {
   streak: number;
   avatar: string;
   location?: LatLng;
+  // Anonymized identity columns surfaced to the admin database view.
+  // These two `*Hex` fields are display-only placeholders for the
+  // seeded users (who never went through the live register flow);
+  // when the actually-registered current user matches a row by
+  // username, the registry projection overlays the real PBKDF2
+  // nullifier from the identity slice in their place.
+  identityNullifierHex: string;
+  loginNullifierHex: string;
+  role: "admin" | "citizen";
 }
 
 export interface UiReward {
@@ -82,7 +96,7 @@ export interface RedeemedVoucher {
   redeemedAt: string;
 }
 
-export interface AppState {
+export interface AppState extends IdentitySlice {
   currentUserId: number;
   users: UiUser[];
   reports: UiReport[];
@@ -170,7 +184,11 @@ const initialRedeemedVouchers: RedeemedVoucher[] = [
   },
 ];
 
-const stateCreator: StateCreator<AppState> = (set, get) => ({
+const stateCreator: StateCreator<AppState> = (set, get, store) => ({
+  // Identity slice is merged in below; its initial state lives in the
+  // slice file so freshSeedState() can mirror it without duplication.
+  ...createIdentitySlice(set as Parameters<typeof createIdentitySlice>[0], get, store),
+
   currentUserId: 7,
   users: seedUsers,
   reports: seedReports,
@@ -389,12 +407,14 @@ const safeStorage = (): StateStorage =>
     : noopStorage;
 
 export const STORAGE_KEY = "crowdupkeep-state-v1";
-export const STORAGE_VERSION = 4;
+export const STORAGE_VERSION = 7;
 
-// Returns the "fresh from seeds" snapshot used both at first hydrate and
-// on every hard-reset migration. Exposed for tests so the migrate
+// Returns the "fresh from seeds" snapshot used both at first hydrate
+// and on every hard-reset migration. Exposed for tests so the migrate
 // behaviour can be exercised without spelunking through persist
-// internals.
+// internals. Includes the identity slice's initial state so a v4 → v5
+// migration can layer the new identity fields onto an existing
+// catalogue without losing reports/redemptions.
 export function freshSeedState(): Pick<
   AppState,
   | "currentUserId"
@@ -404,6 +424,13 @@ export function freshSeedState(): Pick<
   | "redeemedVouchers"
   | "bannedUsernames"
   | "selectedDistrict"
+  | "username"
+  | "identityNullifier"
+  | "loginNullifier"
+  | "isAuthenticated"
+  | "ownershipPublicKey"
+  | "totpSecret"
+  | "adminVerified"
 > {
   return {
     currentUserId: 7,
@@ -413,21 +440,39 @@ export function freshSeedState(): Pick<
     redeemedVouchers: initialRedeemedVouchers,
     bannedUsernames: [],
     selectedDistrict: ALL_LOCATIONS,
+    ...identityInitialState,
   };
 }
 
-// Hard reset for any client below the current STORAGE_VERSION: drop
-// persisted reports, redeemed vouchers, bans, etc. and rehydrate
-// everything from the mockData seeds. Bumped each time seedReports /
-// seedRewards changes shape in a way that breaks older snapshots —
-// e.g. v4 added the `rewardId` field on reports and a renamed
-// 0-stock voucher.
+// Migration policy:
+//   - From version <4: shape of seedReports/seedRewards changed
+//     enough that the cleanest path is a hard reset to the current
+//     seeds (no precious data was tracked at that level).
+//   - From version <6: the v4→v5 path added the identity slice;
+//     the v5→v6 path invalidated the v5 loginNullifier (which was
+//     derived from the citizen ID and was therefore the source of
+//     the username-only fast-path bug). Both paths converge on the
+//     same destination: layer identityInitialState onto the
+//     existing snapshot. Catalogue / reports / redemptions / bans
+//     survive untouched; auth slots come up null so the user
+//     re-registers with the new password-derived loginNullifier.
+//   - From version <7: the ownership proof was added — pre-v7
+//     snapshots have no `ownershipPublicKey`, so a stored
+//     loginNullifier alone is no longer sufficient to authenticate.
+//     Wipe the identity slice so the user re-registers and gets a
+//     keypair derived through the new flow. Catalogue survives.
 export function migrateState(
   persistedState: unknown,
   fromVersion: number,
 ): AppState {
-  if (fromVersion < STORAGE_VERSION) {
+  if (fromVersion < 4) {
     return freshSeedState() as unknown as AppState;
+  }
+  if (fromVersion < 7) {
+    return {
+      ...(persistedState as object),
+      ...identityInitialState,
+    } as unknown as AppState;
   }
   return persistedState as AppState;
 }
@@ -448,6 +493,24 @@ export const useAppStore = create<AppState>()(
       redeemedVouchers: state.redeemedVouchers,
       bannedUsernames: state.bannedUsernames,
       selectedDistrict: state.selectedDistrict,
+      // Identity slice — derived values only, no PII. Persisting these
+      // is what enables "no re-entry of the national ID on the same
+      // device". The nullifiers are one-way PBKDF2 outputs.
+      username: state.username,
+      identityNullifier: state.identityNullifier,
+      loginNullifier: state.loginNullifier,
+      isAuthenticated: state.isAuthenticated,
+      role: state.role,
+      // Public half of the Ed25519 ownership keypair. The private half
+      // is never persisted — re-derived from typed credentials on each
+      // login attempt. JWK-shaped JSON string for stable round-tripping
+      // through the persist layer.
+      ownershipPublicKey: state.ownershipPublicKey,
+      // TOTP secret is persisted in the demo so the admin doesn't have
+      // to re-enrol every session. Production would move this to the
+      // server.
+      totpSecret: state.totpSecret,
+      adminVerified: state.adminVerified,
     }),
   }),
 );

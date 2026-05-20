@@ -8,6 +8,7 @@ import { Leaderboard } from "./components/Leaderboard";
 import { Rewards } from "./components/Rewards";
 import { Profile } from "./components/Profile";
 import { AdminDashboard } from "./components/AdminDashboard";
+import { AdminDatabaseView } from "./components/AdminDatabaseView";
 import { AdminValidate } from "./components/AdminValidate";
 
 export const router = createBrowserRouter([
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
       { path: "rewards", Component: Rewards },
       { path: "profile", Component: Profile },
       { path: "admin", Component: AdminDashboard },
+      { path: "admin/database", Component: AdminDatabaseView },
       { path: "admin/validate/:id", Component: AdminValidate },
     ],
   },

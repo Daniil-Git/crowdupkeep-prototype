@@ -9,6 +9,7 @@ import { LocationDropdown } from "./LocationDropdown";
 import { useAppStore } from "../store/appStore";
 import { matchesFilter } from "@/lib/districts";
 import { toast } from "sonner";
+import { AdminTotpVerify } from "./AdminTotpVerify";
 
 // Admin dashboard reads from the same store as the citizen dashboard so
 // district filtering, stats, and search stay consistent across the two
@@ -22,6 +23,10 @@ export function AdminDashboard() {
   const reports = useAppStore((s) => s.reports);
   const banUser = useAppStore((s) => s.banUser);
   const selectedDistrict = useAppStore((s) => s.selectedDistrict);
+  // Admin MFA gate. All hooks below this run unconditionally so the
+  // Rules-of-Hooks order is invariant when `adminVerified` flips —
+  // only the rendered output is gated.
+  const adminVerified = useAppStore((s) => s.adminVerified);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState<string>("");
 
@@ -57,13 +62,34 @@ export function AdminDashboard() {
     toast.error(`User ${username} has been banned`);
   };
 
+  if (!adminVerified) {
+    return (
+      <AdminTotpVerify
+        onVerified={() => {
+          /* store flips adminVerified=true; this component re-renders. */
+        }}
+        onCancel={() => navigate("/dashboard")}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
-      <div className="bg-purple-700 text-white px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate("/profile")} aria-label="Back">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h1 className="text-lg">Admin Dashboard</h1>
+      <div className="bg-purple-700 text-white px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate("/profile")} aria-label="Back">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg">Admin Dashboard</h1>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-white/10 text-white border-white/40 hover:bg-white/20"
+          onClick={() => navigate("/admin/database")}
+        >
+          User Registry
+        </Button>
       </div>
 
       <div className="bg-gradient-to-br from-purple-700 to-purple-900 px-4 py-6 text-white">

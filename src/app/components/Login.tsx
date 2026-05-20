@@ -1,47 +1,64 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { MapPin, Upload } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { toast } from "sonner";
+import { useAppStore } from "../store/appStore";
 
+// Login is strictly username + password.
+//
+// The citizen ID is NEVER requested here — it's only used at
+// registration to derive the long-lived identityNullifier. The
+// loginNullifier is PBKDF2(password, salt + username), so the only
+// way to reproduce the credential is to know BOTH fields. There is
+// no fast path that bypasses the password (that was the bug this
+// version fixes).
+//
+// In a real product, the store's `login` action would be a thin
+// wrapper around POST /auth/session { username, loginNullifier },
+// with the server holding the authoritative pair. Here the persisted
+// local store stands in for the server; the comparison logic is
+// identical in shape.
 export function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const login = useAppStore((s) => s.login);
+  const cachedUsername = useAppStore((s) => s.username);
+
+  const [username, setUsername] = useState(cachedUsername ?? "");
   const [password, setPassword] = useState("");
-  const [idPhoto, setIdPhoto] = useState<File | null>(null);
-  // Controlled modal — the previous DialogTrigger pattern was uncontrolled,
-  // so calling setIdModalOpen(false) on submit had no effect and the modal
-  // stayed open over the success toast.
-  const [idModalOpen, setIdModalOpen] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
-      toast.success("Login successful!");
-      navigate("/dashboard");
-    }
-  };
-
-  const handleIDVerification = async () => {
-    if (!idPhoto) {
-      toast.error("Please upload an ID photo");
+    if (!username || !password) {
+      toast.error("Username and password are both required");
       return;
     }
-    setVerifying(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setVerifying(false);
-    setIdModalOpen(false);
-    setIdPhoto(null);
-    toast.success("✓ ID Verified successfully!");
+    setSubmitting(true);
+    try {
+      const ok = await login({ username, password });
+      if (ok) {
+        toast.success("Login successful!");
+        navigate("/dashboard");
+        return;
+      }
+      // Identical message for "wrong password" and "unknown user" —
+      // never disclose which one failed to a caller who might be
+      // probing for valid usernames.
+      toast.error("Invalid credentials.");
+    } finally {
+      setSubmitting(false);
+      // Wipe the typed password from the form on every attempt — a
+      // rejected value should not sit in the input waiting for the
+      // user to retry by editing one character.
+      setPassword("");
+    }
   };
 
   return (
     <div className="h-screen flex flex-col bg-white">
-      {/* Header with map background */}
       <div className="relative h-[280px] bg-gradient-to-br from-[#1976D2] to-[#1565C0] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 opacity-20">
           <MapPin className="absolute top-10 left-10 w-8 h-8 text-white" />
@@ -57,98 +74,48 @@ export function Login() {
         </div>
       </div>
 
-      {/* Login form */}
       <div className="flex-1 px-6 pt-8 pb-6">
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <Label htmlFor="email">Email or Username</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
+              id="username"
               type="text"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="mt-1.5"
+              autoComplete="username"
             />
           </div>
 
           <div>
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">Password / PIN</Label>
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="Enter your password or PIN"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1.5"
+              autoComplete="current-password"
             />
           </div>
 
-          <Button type="submit" className="w-full bg-[#1976D2] hover:bg-[#1565C0] text-white">
-            Login
+          <Button
+            type="submit"
+            className="w-full bg-[#1976D2] hover:bg-[#1565C0] text-white"
+            disabled={submitting || !username || !password}
+          >
+            {submitting ? "Verifying…" : "Login"}
           </Button>
         </form>
 
-        <div className="mt-6 space-y-3">
-          <Button
-            variant="outline"
-            className="w-full border-[#1976D2] text-[#1976D2]"
-            onClick={() => setIdModalOpen(true)}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Verify ID/DOB
-          </Button>
-          <Dialog
-            open={idModalOpen}
-            onOpenChange={(next) => {
-              if (verifying) return;
-              setIdModalOpen(next);
-              if (!next) setIdPhoto(null);
-            }}
-          >
-            <DialogContent className="max-w-[340px]">
-              <DialogHeader>
-                <DialogTitle>Verify Identity</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <p className="text-sm text-gray-600">
-                  Upload a photo of your ID to verify your identity and date of birth.
-                </p>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <Upload className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setIdPhoto(e.target.files?.[0] || null)}
-                    className="hidden"
-                    id="id-upload"
-                  />
-                  <label htmlFor="id-upload" className="cursor-pointer">
-                    <span className="text-sm text-[#1976D2]">
-                      {idPhoto ? idPhoto.name : "Choose file or take photo"}
-                    </span>
-                  </label>
-                </div>
-                <Button
-                  className="w-full bg-[#1976D2] hover:bg-[#1565C0]"
-                  onClick={handleIDVerification}
-                  disabled={!idPhoto || verifying}
-                >
-                  {verifying ? "Verifying…" : "Submit for Verification"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <div className="text-center">
-            <span className="text-sm text-gray-600">Don't have an account? </span>
-            <button
-              onClick={() => navigate("/register")}
-              className="text-sm text-[#1976D2]"
-            >
-              Register
-            </button>
-          </div>
+        <div className="mt-6 text-center">
+          <span className="text-sm text-gray-600">Don't have an account? </span>
+          <button onClick={() => navigate("/register")} className="text-sm text-[#1976D2]">
+            Register
+          </button>
         </div>
       </div>
     </div>
