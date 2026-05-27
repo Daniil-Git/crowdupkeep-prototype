@@ -96,6 +96,31 @@ const api = {
     location.reload();
   },
 
+  // Single-call shortcut to fully assume a user identity for demos.
+  // Two `cu.setState({...})` calls (one for `username`, one for
+  // `currentUserId`) make the surfaces APPEAR aligned but leave four
+  // auth-flow gaps behind: no PBKDF2 nullifier hex, no Ed25519
+  // ownership keypair, no `isAuthenticated`, no `role`. Logout / re-
+  // login then fail because the login flow has nothing to verify
+  // against. `becomeUser` closes all four gaps by going through the
+  // proper `register()` action — real PBKDF2 derivation, real
+  // ownership keypair, identity slice fully populated, and the
+  // register-time users[] sync (adopts the matching seed slot when
+  // the username collides, or overlays the placeholder at
+  // currentUserId otherwise). After return, login/logout works for
+  // this user without further setup.
+  //
+  // Defaults keep the dev console one-liner short; override either
+  // arg to exercise a different credential combination.
+  //
+  // Example: cu.becomeUser("civic_hero")
+  // Example: cu.becomeUser("wreakage_fixer", "my_demo_password")
+  becomeUser: (
+    username: string,
+    password: string = "demo123",
+    rawCitizenId: string = "1234567890",
+  ) => useAppStore.getState().register({ username, password, rawCitizenId }),
+
   // Identity-aware helpers — added when the admin DB view shipped.
   //
   // `promoteToAdmin(username?)` runs the properly-gated store action

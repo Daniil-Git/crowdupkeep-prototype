@@ -20,6 +20,84 @@ beforeEach(() => {
   resetStore();
 });
 
+describe("identitySlice — register: gamification users[] sync", () => {
+  it("OVERLAYS the slot at currentUserId when the username does NOT collide with any seed", async () => {
+    // Pre-condition: id=7 (the default currentUserId) is the seeded
+    // "demo_user" placeholder.
+    const slotBefore = useAppStore.getState().users.find((u) => u.id === 7)!;
+    expect(slotBefore.username).toBe("demo_user");
+
+    await useAppStore.getState().register({
+      username: "wreakage_fixer",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+
+    const s = useAppStore.getState();
+    // Slot at id=7 IS the registered user — same id, real identity.
+    const slotAfter = s.users.find((u) => u.id === 7)!;
+    expect(slotAfter.username).toBe("wreakage_fixer");
+    expect(slotAfter.email).toBe("wreakage_fixer@limassol.cy");
+    expect(slotAfter.identityNullifierHex).toBe(s.identityNullifier);
+    expect(slotAfter.loginNullifierHex).toBe(s.loginNullifier);
+    // No double-row — the previous "demo_user" placeholder is gone,
+    // not appended elsewhere in the array.
+    expect(s.users.find((u) => u.username === "demo_user")).toBeUndefined();
+    // currentUserId stays at the same id; only the slot's content changed.
+    expect(s.currentUserId).toBe(7);
+  });
+
+  it("ADOPTS the existing slot when the registered name matches a seed (no double-row)", async () => {
+    // "civic_hero" is id=1 in the seed. Registering with that name
+    // should move currentUserId to id=1 and overlay the seed's
+    // nullifier hex columns with the real PBKDF2 outputs — NOT
+    // create a second civic_hero row at id=7.
+    await useAppStore.getState().register({
+      username: "civic_hero",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+
+    const s = useAppStore.getState();
+    expect(s.currentUserId).toBe(1);
+    const civicHeroRows = s.users.filter((u) => u.username === "civic_hero");
+    expect(civicHeroRows.length).toBe(1);
+    expect(civicHeroRows[0].id).toBe(1);
+    expect(civicHeroRows[0].identityNullifierHex).toBe(s.identityNullifier);
+    expect(civicHeroRows[0].loginNullifierHex).toBe(s.loginNullifier);
+    // The unrelated placeholder at id=7 is untouched.
+    expect(s.users.find((u) => u.id === 7)!.username).toBe("demo_user");
+  });
+
+  it("REASSIGNS reports authored by the previous placeholder to the new username", async () => {
+    // Seed reports authored by id=7 carry createdByName === "demo_user".
+    // After register-as-wreakage_fixer, those reports should surface
+    // under "wreakage_fixer" so the citizen sees them in their
+    // "My Reports" list as their own.
+    const idsBefore = useAppStore.getState().reports
+      .filter((r) => r.createdById === 7)
+      .map((r) => r.id);
+    expect(idsBefore.length).toBeGreaterThan(0);
+
+    await useAppStore.getState().register({
+      username: "wreakage_fixer",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+
+    const reportsAfter = useAppStore.getState().reports.filter((r) =>
+      idsBefore.includes(r.id),
+    );
+    for (const r of reportsAfter) {
+      expect(r.createdByName).toBe("wreakage_fixer");
+    }
+    // No "demo_user" residue in any report.
+    expect(
+      useAppStore.getState().reports.find((r) => r.createdByName === "demo_user"),
+    ).toBeUndefined();
+  });
+});
+
 describe("identitySlice — register", () => {
   it("derives and stores both nullifiers, marks the user authenticated", async () => {
     const { register } = useAppStore.getState();
@@ -715,13 +793,25 @@ describe("identitySlice — promoteToAdmin (session-user tolerance)", () => {
     expect(useAppStore.getState().totpSecret).toBe(result.totpEnrolment!.secret);
   });
 
-  it("RE-PROMOTING the session user (already admin via session) reports alreadyAdmin without throwing", async () => {
+  it("RE-PROMOTING an already-admin registered user reports alreadyAdmin without throwing", async () => {
+    // register() now overlays users[currentUserId] with the
+    // registered identity, so wreakage_fixer lives at id=7 in
+    // users[] after registration. We promote via the proper action
+    // (which flips both identity.role and users[7].role to admin in
+    // lockstep), then re-promote to assert idempotency. The
+    // previous version of this test used setRole("admin") as a
+    // shortcut — that bypassed the registry write by design and
+    // left the two layers out of sync, which made the re-promote
+    // hit the reconciliation path instead of the idempotent return.
     await useAppStore.getState().register({
       username: "wreakage_fixer",
       password: "hunter2",
       rawCitizenId: "1234567890",
     });
-    useAppStore.getState().setRole("admin");
+    await useAppStore.getState().promoteToAdmin("wreakage_fixer");
+    expect(useAppStore.getState().role).toBe("admin");
+    expect(useAppStore.getState().users.find((u) => u.id === 7)!.role).toBe("admin");
+
     const result = await useAppStore.getState().promoteToAdmin("wreakage_fixer");
     expect(result.alreadyAdmin).toBe(true);
     expect(result.totpEnrolment).toBeNull();

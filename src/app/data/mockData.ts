@@ -41,7 +41,12 @@ export const seedUsers: UiUser[] = [
   { id: 4, username: "eco_defender",   email: "eco_defender@limassol.cy",   xp: 2340, streak: 8,  avatar: "https://i.pravatar.cc/150?img=4",  role: "citizen", ...userIdent(4)  },
   { id: 5, username: "clean_streets",  email: "clean_streets@limassol.cy",  xp: 2100, streak: 7,  avatar: "https://i.pravatar.cc/150?img=5",  role: "citizen", ...userIdent(5)  },
   { id: 6, username: "volunteers_cy",  email: "volunteers_cy@limassol.cy",  xp: 1490, streak: 9,  avatar: "https://i.pravatar.cc/150?img=6",  role: "citizen", ...userIdent(6)  },
-  { id: 7, username: "you",            email: "you@limassol.cy",            xp: 1250, streak: 5,  avatar: "https://i.pravatar.cc/150?img=7",  role: "admin",   ...userIdent(7)  },
+  // id=7 is the unregistered-demo placeholder for `currentUserId`.
+  // The literal "you" was removed here so the data layer never carries
+  // a self-referential username; the "you" / "You" / "YOU" alias is a
+  // pure display-layer transform performed by <Username /> when an
+  // author string matches the live session.
+  { id: 7, username: "demo_user",      email: "demo_user@limassol.cy",      xp: 1250, streak: 5,  avatar: "https://i.pravatar.cc/150?img=7",  role: "admin",   ...userIdent(7)  },
   { id: 8, username: "maria_k",        email: "maria_k@limassol.cy",        xp: 1120, streak: 4,  avatar: "https://i.pravatar.cc/150?img=8",  role: "citizen", ...userIdent(8)  },
   { id: 9, username: "john_d",         email: "john_d@limassol.cy",         xp: 980,  streak: 3,  avatar: "https://i.pravatar.cc/150?img=9",  role: "citizen", ...userIdent(9)  },
   { id: 10, username: "alex_p",        email: "alex_p@limassol.cy",         xp: 850,  streak: 6,  avatar: "https://i.pravatar.cc/150?img=10", role: "citizen", ...userIdent(10) },
@@ -138,7 +143,7 @@ export const seedReports: UiReport[] = [
     geometry: { lat: 34.671, lng: 33.0445 },
     address: "Molos Promenade, Limassol",
     createdById: 7,
-    createdByName: "you",
+    createdByName: "demo_user",
     createdAt: "2026-04-12T20:45:00Z",
     photos: ["https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800"],
     comments: [
@@ -185,7 +190,7 @@ export const seedReports: UiReport[] = [
     geometry: { lat: 34.6712, lng: 33.0431 },
     address: "Limassol Old Port",
     createdById: 7,
-    createdByName: "you",
+    createdByName: "demo_user",
     createdAt: "2026-04-15T12:00:00Z",
     photos: ["https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=800"],
     comments: [],
@@ -200,7 +205,7 @@ export const seedReports: UiReport[] = [
     geometry: { lat: 34.7088, lng: 33.0253 },
     address: "Children's Park, Limassol",
     createdById: 7,
-    createdByName: "you",
+    createdByName: "demo_user",
     createdAt: "2026-04-14T09:30:00Z",
     photos: ["https://images.unsplash.com/photo-1503455637927-730bce8583c0?w=800"],
     comments: [

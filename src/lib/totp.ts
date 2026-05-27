@@ -70,14 +70,19 @@ export function generateSecret(byteLength = 20): string {
   return bytesToBase32(bytes);
 }
 
-function counterBytes(counter: number): Uint8Array {
+function counterBytes(counter: number): ArrayBuffer {
   // 8-byte big-endian counter. JS numbers are 53-bit safe, well above
-  // the foreseeable lifetime of any TOTP timestamp/30.
+  // the foreseeable lifetime of any TOTP timestamp/30. Returns the
+  // raw ArrayBuffer (not a Uint8Array view) so the result feeds
+  // crypto.subtle.sign's `BufferSource` parameter without the
+  // Uint8Array<ArrayBufferLike> vs Uint8Array<ArrayBuffer>
+  // assignability narrowing that TS 5.7+ enforces on typed-array
+  // generic parameters.
   const buf = new ArrayBuffer(8);
   const view = new DataView(buf);
   view.setUint32(0, Math.floor(counter / 0x100000000));
   view.setUint32(4, counter & 0xffffffff);
-  return new Uint8Array(buf);
+  return buf;
 }
 
 function dynamicTruncate(hmac: Uint8Array, digits: number): string {
@@ -110,7 +115,9 @@ export async function totpCode(secret: string, opts: TotpOptions = {}): Promise<
   const keyBytes = base32ToBytes(secret);
   const key = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    // TS 5.7+ narrows Uint8Array's generic; the runtime shape is
+    // unchanged — base32ToBytes returns an ArrayBuffer-backed view.
+    keyBytes as BufferSource,
     { name: "HMAC", hash: algorithm },
     false,
     ["sign"],

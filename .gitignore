@@ -17,4 +17,20 @@ build/
 *.db-wal
 *.db-journal
 
+# Iteration scratch kept at repo root: screenshots taken during
+# thesis demos, draft chapter docs (.docx / .pdf / .txt), backup
+# archives, verification notes. The leading slash anchors each
+# pattern to the repo root, so the same extension under src/,
+# public/, prisma/, docs/, etc. is NOT affected — a legitimate
+# in-source .png asset or seeded SQL dump can still be tracked.
+/*.png
+/*.docx
+/*.tar.gz
+/thesis_ch*.pdf
+/thesis_ch*.txt
+/copy_thesis_*.txt
+/batchread*.pdf
+/batchread*.txt
+/verifynotes.pdf
+
 

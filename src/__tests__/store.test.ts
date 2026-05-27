@@ -427,14 +427,14 @@ describe("seed catalogue (v4 invariants)", () => {
   });
 });
 
-describe("persist migrate (v7 — ownership-key wipe for the zero-knowledge proof rollout)", () => {
+describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 seeds)", () => {
   // The migrate function is the only way persisted snapshots from
   // earlier devConsole / catalogue shapes get cleaned up on a real
   // user's browser. Exercising it directly is the cheap way to keep
   // it honest without spelunking through Zustand's internal hydrate.
 
   it("STORAGE_VERSION is the current target", () => {
-    expect(STORAGE_VERSION).toBe(7);
+    expect(STORAGE_VERSION).toBe(8);
   });
 
   it("freshSeedState returns the canonical 'just installed' snapshot (incl. identity defaults)", () => {
@@ -549,6 +549,138 @@ describe("persist migrate (v7 — ownership-key wipe for the zero-knowledge proo
     expect(migrated.ownershipPublicKey).toBeNull();
     expect(migrated.totpSecret).toBeNull();
     expect(migrated.adminVerified).toBe(false);
+  });
+
+  it("v7 → v8 SCRUBS the literal 'you' AND retroactively overlays the registered user into users[currentUserId]", () => {
+    // The v7 → v8 contract: (a) the literal "you" placeholder was
+    // renamed at the seed layer to "demo_user" so the data layer
+    // never carries a self-referential username; (b) if the identity
+    // slice already holds a registered user, the slot at
+    // currentUserId is overlaid in place with that identity, so the
+    // admin registry view stops showing both "demo_user" and the
+    // registered name as separate rows. The credential triple is
+    // preserved byte-for-byte — this is a data-layer realignment,
+    // not a credential rotation.
+    const v7Snapshot = {
+      currentUserId: 7,
+      users: [
+        { id: 7, username: "you", email: "you@limassol.cy", xp: 1250, streak: 5, avatar: "x", role: "admin", identityNullifierHex: "1d07" + "0".repeat(60), loginNullifierHex: "1007" + "0".repeat(60) },
+        { id: 8, username: "maria_k", email: "y", xp: 0, streak: 0, avatar: "x", role: "citizen", identityNullifierHex: "1d08" + "0".repeat(60), loginNullifierHex: "1008" + "0".repeat(60) },
+      ],
+      reports: [
+        { id: 6, title: "old", description: "", difficulty: 2, status: "pending", geometry: { lat: 34.6, lng: 33.0 }, address: "x", createdById: 7, createdByName: "you", createdAt: "", photos: [], comments: [], solutions: [] },
+        { id: 100, title: "by-other", description: "", difficulty: 1, status: "solved", geometry: { lat: 34.7, lng: 33.0 }, address: "y", createdById: 8, createdByName: "maria_k", createdAt: "", photos: [], comments: [], solutions: [] },
+      ],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: [],
+      selectedDistrict: ALL_LOCATIONS,
+      username: "wreakage_fixer",
+      identityNullifier: "ff".repeat(32),
+      loginNullifier: "ee".repeat(32),
+      isAuthenticated: true,
+      role: "citizen",
+      ownershipPublicKey: '{"kty":"OKP"}',
+      totpSecret: null,
+      adminVerified: false,
+    };
+    const migrated = migrateState(v7Snapshot, 7);
+    // The literal "you" is gone from both surfaces.
+    expect(migrated.users.find((u) => u.username === "you")).toBeUndefined();
+    expect(migrated.reports.find((r) => r.createdByName === "you")).toBeUndefined();
+    // No "demo_user" residue either — the slot was overlaid with
+    // the registered identity rather than left at the placeholder.
+    expect(migrated.users.find((u) => u.username === "demo_user")).toBeUndefined();
+    // The id=7 row IS the registered user, with the real PBKDF2
+    // nullifier hex from the identity slice.
+    const slot = migrated.users.find((u) => u.id === 7)!;
+    expect(slot.username).toBe("wreakage_fixer");
+    expect(slot.email).toBe("wreakage_fixer@limassol.cy");
+    expect(slot.identityNullifierHex).toBe("ff".repeat(32));
+    expect(slot.loginNullifierHex).toBe("ee".repeat(32));
+    expect(slot.role).toBe("citizen");
+    // Other users untouched.
+    expect(migrated.users.find((u) => u.id === 8)!.username).toBe("maria_k");
+    // Reports authored by id=7 carry the registered name; other reports untouched.
+    expect(migrated.reports.find((r) => r.id === 6)!.createdByName).toBe("wreakage_fixer");
+    expect(migrated.reports.find((r) => r.id === 100)!.createdByName).toBe("maria_k");
+    // Identity slice survives byte-for-byte.
+    expect(migrated.username).toBe("wreakage_fixer");
+    expect(migrated.loginNullifier).toBe("ee".repeat(32));
+    expect(migrated.ownershipPublicKey).toBe('{"kty":"OKP"}');
+    expect(migrated.isAuthenticated).toBe(true);
+    expect(migrated.role).toBe("citizen");
+  });
+
+  it("v7 → v8 leaves the placeholder slot as 'demo_user' when the identity slice is empty (no registration yet)", () => {
+    // When the persisted state has no registered user, there is
+    // nothing to overlay. The scrub of the literal "you" still
+    // runs and the slot is renamed to "demo_user" — which is the
+    // visible placeholder for the never-registered demo.
+    const v7Snapshot = {
+      currentUserId: 7,
+      users: [
+        { id: 7, username: "you", email: "you@limassol.cy", xp: 1250, streak: 5, avatar: "x", role: "admin", identityNullifierHex: "1d07" + "0".repeat(60), loginNullifierHex: "1007" + "0".repeat(60) },
+      ],
+      reports: [
+        { id: 6, title: "old", description: "", difficulty: 2, status: "pending", geometry: { lat: 34.6, lng: 33.0 }, address: "x", createdById: 7, createdByName: "you", createdAt: "", photos: [], comments: [], solutions: [] },
+      ],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: [],
+      selectedDistrict: ALL_LOCATIONS,
+      username: null,
+      identityNullifier: null,
+      loginNullifier: null,
+      isAuthenticated: false,
+      role: null,
+      ownershipPublicKey: null,
+      totpSecret: null,
+      adminVerified: false,
+    };
+    const migrated = migrateState(v7Snapshot, 7);
+    expect(migrated.users.find((u) => u.id === 7)!.username).toBe("demo_user");
+    expect(migrated.reports.find((r) => r.id === 6)!.createdByName).toBe("demo_user");
+  });
+
+  it("v7 → v8 adopts the existing slot when the registered name matches a seed user (no double-row)", () => {
+    // If the registered username collides with an existing seed
+    // user (e.g. someone registered as "civic_hero"), we should
+    // NOT overlay the placeholder at id=7 — that would create two
+    // rows with the same username. Instead, currentUserId moves to
+    // the matching id and the seed's nullifier hex columns are
+    // overlaid with the real PBKDF2 outputs.
+    const v7Snapshot = {
+      currentUserId: 7,
+      users: [
+        { id: 1, username: "civic_hero", email: "civic_hero@limassol.cy", xp: 3450, streak: 15, avatar: "x", role: "citizen", identityNullifierHex: "1d01" + "0".repeat(60), loginNullifierHex: "1001" + "0".repeat(60) },
+        { id: 7, username: "you", email: "you@limassol.cy", xp: 1250, streak: 5, avatar: "x", role: "admin", identityNullifierHex: "1d07" + "0".repeat(60), loginNullifierHex: "1007" + "0".repeat(60) },
+      ],
+      reports: [],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: [],
+      selectedDistrict: ALL_LOCATIONS,
+      username: "civic_hero",
+      identityNullifier: "ff".repeat(32),
+      loginNullifier: "ee".repeat(32),
+      isAuthenticated: true,
+      role: "citizen",
+      ownershipPublicKey: '{"kty":"OKP"}',
+      totpSecret: null,
+      adminVerified: false,
+    };
+    const migrated = migrateState(v7Snapshot, 7);
+    // currentUserId moved to the matching seed row.
+    expect(migrated.currentUserId).toBe(1);
+    // No double-row — only one entry per username.
+    const civicHeroRows = migrated.users.filter((u) => u.username === "civic_hero");
+    expect(civicHeroRows.length).toBe(1);
+    // The matched row carries the real nullifier hex now.
+    expect(civicHeroRows[0].identityNullifierHex).toBe("ff".repeat(32));
+    expect(civicHeroRows[0].loginNullifierHex).toBe("ee".repeat(32));
+    // The placeholder at id=7 is renamed but otherwise left alone.
+    expect(migrated.users.find((u) => u.id === 7)!.username).toBe("demo_user");
   });
 
   it("v6 → v7 INVALIDATES a stored loginNullifier with no matching ownership key (forces re-register)", () => {

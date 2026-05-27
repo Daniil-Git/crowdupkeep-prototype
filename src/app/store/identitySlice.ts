@@ -261,6 +261,63 @@ export const createIdentitySlice: StateCreator<IdentitySlice> = (set, get, store
       // at verify time inside mockAuthLoginApi.
       ownershipPublicKey: JSON.stringify(ownership.publicKeyJwk),
     });
+
+    // Sync the gamification users[] table to the new identity so the
+    // admin registry view, the "My Reports" list, and getCurrentUser()
+    // all surface the same name instead of the pre-register
+    // placeholder. Two cases:
+    //   (a) The registered username matches an existing seed row —
+    //       adopt that slot. currentUserId moves to the matching id;
+    //       the slot's nullifier hex columns are overlaid with the
+    //       real PBKDF2 outputs. The placeholder row at the old
+    //       currentUserId is left alone.
+    //   (b) The registered username does NOT match any seed row —
+    //       overlay the slot at currentUserId in place. The
+    //       placeholder username, email, nullifier hex, and role are
+    //       all replaced with the registered values; reports whose
+    //       createdByName was the placeholder are retro-fitted to
+    //       the new username so the citizen's "My Reports" list
+    //       shows their seeded reports as their own.
+    set((state) => {
+      const existing = state.users.find((u) => u.username === username);
+      if (existing) {
+        return {
+          currentUserId: existing.id,
+          users: state.users.map((u) =>
+            u.id === existing.id
+              ? {
+                  ...u,
+                  identityNullifierHex: identityNullifier,
+                  loginNullifierHex: loginNullifier,
+                }
+              : u,
+          ),
+        } as Partial<typeof state>;
+      }
+      const slot = state.users.find((u) => u.id === state.currentUserId);
+      if (!slot) return state;
+      const prevUsername = slot.username;
+      return {
+        users: state.users.map((u) =>
+          u.id === state.currentUserId
+            ? {
+                ...u,
+                username,
+                email: `${username}@limassol.cy`,
+                identityNullifierHex: identityNullifier,
+                loginNullifierHex: loginNullifier,
+                role: "citizen",
+              }
+            : u,
+        ),
+        reports: state.reports.map((r) =>
+          r.createdByName === prevUsername
+            ? { ...r, createdByName: username }
+            : r,
+        ),
+      } as Partial<typeof state>;
+    });
+
     return { identityNullifier, loginNullifier };
   },
 

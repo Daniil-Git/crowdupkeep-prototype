@@ -114,7 +114,9 @@ export async function deriveOwnershipKeypair(
   const pkcs8 = wrapAsEd25519Pkcs8(seed);
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
-    pkcs8,
+    // TS 5.7+ narrows Uint8Array's generic; runtime shape is
+    // unchanged — wrapAsEd25519Pkcs8 returns an ArrayBuffer-backed view.
+    pkcs8 as BufferSource,
     { name: "Ed25519" },
     true,                          // extractable so we can export jwk for the public side
     ["sign"],
@@ -150,7 +152,7 @@ export async function signChallenge(
   const sig = await crypto.subtle.sign(
     { name: "Ed25519" },
     privateKey,
-    hexToBytes(challengeHex),
+    hexToBytes(challengeHex) as BufferSource,
   );
   return bytesToHex(new Uint8Array(sig));
 }
@@ -172,8 +174,8 @@ export async function verifySignature(
     return await crypto.subtle.verify(
       { name: "Ed25519" },
       publicKey,
-      hexToBytes(signatureHex),
-      hexToBytes(challengeHex),
+      hexToBytes(signatureHex) as BufferSource,
+      hexToBytes(challengeHex) as BufferSource,
     );
   } catch {
     return false;

@@ -945,3 +945,162 @@ Same 75 cases, no skips, no Prisma warning. The 15 DB-backed
 tests that were red-then-skipped during the v3/v4 rounds are
 now running every `npm test`. No test code changed — the shim
 is a probe, not a fixed list.
+
+---
+
+## Decoupling the `"you"` alias from the data layer (round 10)
+
+A subtle but recurring source of confusion in earlier rounds was the
+seeded user at `id=7`, whose `username` field was the literal string
+`"you"`. The intent was a placeholder for "the unregistered demo
+operator", but the literal leaked into surfaces where it has no
+meaning as an identity claim — most visibly the `/admin/database`
+registry view, which listed a row captioned `you` next to rows
+captioned by real usernames. An operator reading that table cannot
+distinguish "this row is me" from "this row is a literal user named
+'you'" without out-of-band knowledge.
+
+The fix is a strict separation between the data layer and the
+display layer.
+
+- **Data layer.** `seedUsers[id=7].username` was renamed from
+  `"you"` to `"demo_user"`, and the three `createdByName: "you"`
+  occurrences in `seedReports` (ids 3, 6, 7) were updated to match.
+  Email, role, XP, and the rest of the row are unchanged — the
+  `id=7` slot continues to serve as the default `currentUserId`
+  before any registration. Every downstream consumer that reads
+  `users[]` directly (the profile surface, comment threads,
+  solution lists, the admin registry table) now sees a real,
+  scalable username string for that slot.
+
+- **Display layer.** A new component `src/app/components/
+  Username.tsx` is the only place in the codebase that substitutes
+  `you` / `You` / `YOU` for an author string. It consults the live
+  session username and applies the substitution only when the two
+  strings match; otherwise the raw author string renders verbatim.
+  The component takes a `variant` prop (`lowercase` | `titlecase`
+  | `uppercase`) so the same transform serves headers, body copy,
+  and emphasis contexts without site-by-site casing logic. It is
+  *not* wired into any existing surface yet — adoption is opt-in,
+  surface-by-surface, future work. The rule it enforces is
+  unidirectional: list surfaces (Dashboard cards, Nearby popup,
+  "Reported by …" headers) may route through it; critical
+  surfaces (Profile, /admin/database, comment threads, solution
+  lists) deliberately bypass it because the audit property they
+  need (verifiable identity) is orthogonal to the affordance the
+  alias provides (fast self-scanning).
+
+- **`AdminDatabaseView`'s `(you)` indicator** was already a
+  display-layer cue layered on top of the raw username column;
+  its fallback used to read `sessionUsername ?? "you"` to
+  highlight the seeded placeholder when no real session was
+  registered. The fallback was updated to `sessionUsername ??
+  "demo_user"` so the highlight still points at the correct row
+  without the literal `"you"` appearing anywhere in the source.
+
+### Register-time identity → users[] sync (extended in round 10)
+
+The original minimal-fix plan for this round was to leave
+`register()` alone and merely scrub the literal `"you"` from
+seed data. Review surfaced a real bug behind that decision: after
+registering as a non-seed username (e.g. `wreakage_fixer`), the
+admin registry view rendered **two** rows for the same operator
+— the seeded `"demo_user"` placeholder at `id=7` AND a
+session-appended `"wreakage_fixer"` row produced by
+`buildAnonymizedRegistry`'s append branch. The same split also
+left `getCurrentUser()` (which reads `users[currentUserId]`) and
+the identity slice's `username` field out of agreement, which
+meant new reports filed by the registered citizen were still
+authored as `"demo_user"` in their `createdByName` field.
+
+The resolution is a register-time sync between the two layers,
+with explicit collision handling for the seed-name case. The new
+`register()` performs a second `set(...)` after the identity slice
+write:
+
+- **Non-collision (the `wreakage_fixer` case).** Overlay the slot
+  at `currentUserId` (typically `id=7`) in place: `username`,
+  `email`, `identityNullifierHex`, `loginNullifierHex`, and
+  `role` are replaced with the registered values. Reports whose
+  `createdByName` was the placeholder name are retro-fitted to
+  the new username, so the citizen's "My Reports" list surfaces
+  their three seeded reports as their own from the first render.
+  The placeholder row is *replaced*, not appended — there is
+  exactly one row per real identity in the registry view.
+
+- **Collision (registered name matches a seed, e.g. `civic_hero`).**
+  Move `currentUserId` to the matching seed row, and overlay just
+  the nullifier hex columns with the real PBKDF2 outputs. The
+  unrelated placeholder row at the old `currentUserId` is left
+  alone. This avoids creating two rows with the same username,
+  which would be the worst possible registry-view UX.
+
+`buildAnonymizedRegistry`'s append branch is no longer reachable
+through the normal flow, but its code path is kept as defensive
+fallback for state-inconsistency edge cases.
+
+### Migration policy (v7 → v8)
+
+`STORAGE_VERSION` was bumped from 7 to 8. The new branch in
+`migrateState` performs two rewrites in sequence:
+
+1. Scrub the literal `"you"` residue from any rehydrated
+   `users[]` row (username + email) and any rehydrated
+   `reports[]` entry (`createdByName`). Fresh-install installs
+   never need this step; existing users at v7 do.
+
+2. If the persisted identity slice already carries a registered
+   `username` (i.e. the user registered under a pre-v8 build),
+   apply the same register-time sync described above
+   *retroactively*. The two branches mirror `register()`'s
+   collision handling exactly: adopt an existing seed slot when
+   the names collide; overlay the placeholder at `currentUserId`
+   otherwise. The credential triple (`username`,
+   `loginNullifier`, `ownershipPublicKey`) in the identity slice
+   is preserved byte-for-byte throughout — this is a data-layer
+   realignment, not a credential rotation, and a returning user
+   who logged in before the bump does **not** have to re-register.
+
+Direct migrate tests in `src/__tests__/store.test.ts` pin down
+the new contract on three branches: the registered-non-collision
+case (id=7 is overlaid in place with the registered identity),
+the no-registration case (id=7 falls back to `"demo_user"`), and
+the seed-collision case (currentUserId moves to the matching id,
+exactly one row per username).
+
+Test suite: `10 passed | 193 passed` (5 new tests: 3 for the
+register-time sync and 2 additional migrate variants).
+
+### Round 10 follow-ups (amend)
+
+Folded into the same commit, not a separate round:
+
+- `<Username />` is now wired into `ReportDetail.tsx` for the
+  "Reported by …" line (variant `lowercase`). Comments and
+  solutions on the same surface deliberately stay on raw
+  `authorName` / `submittedByName` — the rule (list-style
+  views use the alias, audit-style views render raw) is
+  enforced by code inspection.
+- `cu.becomeUser(username, password?, rawCitizenId?)` added to
+  the dev console. One-call shortcut that delegates to
+  `register()` so the manual `cu.setState({...})` pattern (which
+  leaves four auth-flow gaps — no PBKDF2 hex, no Ed25519
+  ownership key, no `isAuthenticated`, no `role`) is no longer
+  the only path to assume an identity for a demo. Logout / re-
+  login works for the assumed user without further setup.
+- Three isolated TS 5.7+ assignability errors resolved by
+  casting `Uint8Array` arguments to `BufferSource` at the
+  `crypto.subtle.{importKey, sign, verify}` call sites in
+  `src/lib/totp.ts` and `src/lib/ownership.ts`. Pure type-level
+  change, runtime unchanged. The remaining 47 `tsc --noEmit`
+  errors (NearbyCandidate widening, IdentitySlice creator
+  typing, Prisma `Json` typing) are pre-existing systematic
+  patterns that need their own scoped cleanup.
+- `src/main.tsx`'s App import dropped its explicit `.tsx`
+  extension to clear `TS5097` without enabling
+  `allowImportingTsExtensions` globally.
+- `.gitignore` extended with root-anchored patterns for
+  iteration artefacts (screenshots, draft chapter docs, backup
+  archives, verification notes). The leading `/` confines each
+  pattern to repo root so a legitimate same-extension file
+  under `src/`, `public/`, `prisma/`, etc. is unaffected.

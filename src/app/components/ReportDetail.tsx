@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Textarea } from "./ui/textarea";
 import { PostSolutionModal } from "./PostSolutionModal";
+import { Username } from "./Username";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { toast } from "sonner";
 import { icon as leafletIcon } from "leaflet";
@@ -240,7 +241,9 @@ export function ReportDetail() {
             <div>
               <p className="text-sm text-gray-600">{report.address}</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Reported by {report.createdByName} • {new Date(report.createdAt).toLocaleDateString()}
+                Reported by{" "}
+                <Username authorUsername={report.createdByName} variant="lowercase" />
+                {" "}• {new Date(report.createdAt).toLocaleDateString()}
               </p>
             </div>
           </div>

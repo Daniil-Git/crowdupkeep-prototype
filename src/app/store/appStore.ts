@@ -407,7 +407,7 @@ const safeStorage = (): StateStorage =>
     : noopStorage;
 
 export const STORAGE_KEY = "crowdupkeep-state-v1";
-export const STORAGE_VERSION = 7;
+export const STORAGE_VERSION = 8;
 
 // Returns the "fresh from seeds" snapshot used both at first hydrate
 // and on every hard-reset migration. Exposed for tests so the migrate
@@ -468,13 +468,113 @@ export function migrateState(
   if (fromVersion < 4) {
     return freshSeedState() as unknown as AppState;
   }
+  let state: AppState = persistedState as AppState;
   if (fromVersion < 7) {
-    return {
-      ...(persistedState as object),
+    state = {
+      ...(state as object),
       ...identityInitialState,
     } as unknown as AppState;
   }
-  return persistedState as AppState;
+  if (fromVersion < 8) {
+    // Two-step rewrite. First, scrub the literal "you" residue from
+    // pre-v8 persisted state (the id=7 seed user's username was
+    // renamed from "you" to "demo_user", and the three reports
+    // authored by id=7 had their createdByName updated to match).
+    // Second, if the persisted identity slice already carries a
+    // registered username (i.e. the user registered under a pre-v8
+    // build and we want their credentials to keep working), overlay
+    // users[currentUserId] with that identity — the same retroactive
+    // sync the refactored register() action performs on a fresh
+    // install. The credential triple in the identity slice
+    // (username, loginNullifier, ownershipPublicKey) is preserved
+    // throughout: this is purely a data-layer realignment.
+    const s = state as unknown as {
+      users?: UiUser[];
+      reports?: UiReport[];
+    };
+    let nextUsers: UiUser[] =
+      s.users?.map((u) =>
+        u.username === "you"
+          ? { ...u, username: "demo_user", email: "demo_user@limassol.cy" }
+          : u,
+      ) ?? seedUsers;
+    let nextReports: UiReport[] =
+      s.reports?.map((r) =>
+        r.createdByName === "you" ? { ...r, createdByName: "demo_user" } : r,
+      ) ?? seedReports;
+
+    const identity = state as unknown as {
+      username?: string | null;
+      identityNullifier?: string | null;
+      loginNullifier?: string | null;
+      role?: "admin" | "citizen" | null;
+      currentUserId?: number;
+    };
+    const session = identity.username;
+    if (session && identity.currentUserId != null) {
+      const collision = nextUsers.find((u) => u.username === session);
+      if (collision) {
+        // Registered name matches an existing user — adopt that slot
+        // and overlay just the nullifier hex columns. currentUserId
+        // moves to the matching id; the previous placeholder row is
+        // left alone.
+        nextUsers = nextUsers.map((u) =>
+          u.id === collision.id
+            ? {
+                ...u,
+                identityNullifierHex:
+                  identity.identityNullifier ?? u.identityNullifierHex,
+                loginNullifierHex:
+                  identity.loginNullifier ?? u.loginNullifierHex,
+              }
+            : u,
+        );
+        state = {
+          ...state,
+          currentUserId: collision.id,
+          users: nextUsers,
+          reports: nextReports,
+        } as AppState;
+      } else {
+        // No collision — overlay the slot at currentUserId in place.
+        const slot = nextUsers.find((u) => u.id === identity.currentUserId);
+        if (slot) {
+          const prevName = slot.username;
+          nextUsers = nextUsers.map((u) =>
+            u.id === identity.currentUserId
+              ? {
+                  ...u,
+                  username: session,
+                  email: `${session}@limassol.cy`,
+                  identityNullifierHex:
+                    identity.identityNullifier ?? u.identityNullifierHex,
+                  loginNullifierHex:
+                    identity.loginNullifier ?? u.loginNullifierHex,
+                  role: identity.role ?? u.role,
+                }
+              : u,
+          );
+          nextReports = nextReports.map((r) =>
+            r.createdByName === prevName
+              ? { ...r, createdByName: session }
+              : r,
+          );
+        }
+        state = {
+          ...state,
+          users: nextUsers,
+          reports: nextReports,
+        } as AppState;
+      }
+    } else {
+      state = {
+        ...state,
+        users: nextUsers,
+        reports: nextReports,
+      } as AppState;
+    }
+  }
+  return state;
 }
 
 export const useAppStore = create<AppState>()(

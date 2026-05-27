@@ -46,10 +46,13 @@ export function AdminDatabaseView() {
   const [demotingUsername, setDemotingUsername] = useState<string | null>(null);
 
   // Which username represents "this operator" for the highlight + the
-  // (you) indicator. The seeded "you" row at id=7 is the placeholder
-  // when no session has been registered yet; once registration sets
-  // a session username, that one wins (e.g. "wreakage_fixer").
-  const effectiveCurrentUsername = sessionUsername ?? "you";
+  // (you) indicator. The seeded "demo_user" row at id=7 is the
+  // placeholder when no session has been registered yet; once
+  // registration sets a session username, that one wins (e.g.
+  // "wreakage_fixer"). The literal "you" was removed from the data
+  // layer — the (you) badge here is a display-layer cue layered on
+  // top of the raw username column.
+  const effectiveCurrentUsername = sessionUsername ?? "demo_user";
 
   // When promoteToAdmin returns a freshly-provisioned TOTP enrolment
   // (happens when the operator promotes themselves and didn't have a
