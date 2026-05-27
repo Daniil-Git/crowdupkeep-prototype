@@ -18,7 +18,11 @@
 
 import type { StateCreator } from "zustand";
 import { canonicalizeOrThrow } from "@/lib/cypriotId";
-import { deriveLoginNullifier, deriveNullifiers } from "@/lib/identity";
+import {
+  deriveIdentityNullifier,
+  deriveLoginNullifier,
+  deriveNullifiers,
+} from "@/lib/identity";
 import {
   deriveOwnershipKeypair,
   generateAuthChallenge,
@@ -38,6 +42,12 @@ import type { UiReport, UiUser } from "./appStore";
 export interface IdentityState {
   username: string | null;
   identityNullifier: string | null;
+  // The most recent prior identityNullifier (before the latest
+  // re-upload). On every successful re-upload of a *different* citizen
+  // ID, the slot rotates: current → previous, new → current. This is
+  // an audit/history slot — it does NOT gate authentication (login
+  // remains password + Ed25519 signature only).
+  previousIdentityNullifier: string | null;
   loginNullifier: string | null;
   isAuthenticated: boolean;
 
@@ -78,6 +88,22 @@ export interface IdentityActions {
     username: string;
     password: string;
   }) => Promise<boolean>;
+
+  // Re-upload of the citizen ID after registration. Derives a fresh
+  // identity nullifier from the new ID and rotates the two slots:
+  //   previousIdentityNullifier ← current identityNullifier
+  //   identityNullifier         ← PBKDF2(newCanonical, identity-salt)
+  // If the new ID canonicalises to the SAME nullifier as the current
+  // one, the call is a no-op (previous slot is NOT clobbered with a
+  // duplicate of current). The login credential triple is deliberately
+  // untouched — this rebinds the identity column only.
+  reuploadIdentity: (params: {
+    rawCitizenId: string;
+  }) => Promise<{
+    changed: boolean;
+    identityNullifier: string;
+    previousIdentityNullifier: string | null;
+  }>;
 
   // Session-only logout. Clears the access flags
   // (isAuthenticated, role, adminVerified) so any role-gated view
@@ -143,6 +169,7 @@ export const TOTP_ISSUER = "CrowdUpKeep";
 export const identityInitialState: IdentityState = {
   username: null,
   identityNullifier: null,
+  previousIdentityNullifier: null,
   loginNullifier: null,
   isAuthenticated: false,
   role: null,
@@ -591,4 +618,63 @@ export const createIdentitySlice: StateCreator<
   },
 
   revokeAdmin: () => set({ adminVerified: false, totpSecret: null }),
+
+  reuploadIdentity: async ({ rawCitizenId }) => {
+    const state = get();
+
+    // Authn gate: re-upload only makes sense for an account that
+    // already exists on this device. Otherwise the caller should be
+    // going through register(), not this action.
+    if (!state.loginNullifier || !state.identityNullifier) {
+      throw new Error(
+        "Cannot re-upload identity before registration. Register an account first.",
+      );
+    }
+
+    // canonicalizeOrThrow surfaces CypriotIdFormatError for malformed
+    // input — same precondition the register action uses.
+    const canonical = canonicalizeOrThrow(rawCitizenId);
+    const next = await deriveIdentityNullifier(canonical);
+
+    // No-op when the new canonical resolves to the same nullifier as
+    // the current one — we deliberately do NOT clobber the previous
+    // slot with a duplicate of the current value. The slot is reserved
+    // for the most recent *prior* binding.
+    if (next === state.identityNullifier) {
+      return {
+        changed: false,
+        identityNullifier: state.identityNullifier,
+        previousIdentityNullifier: state.previousIdentityNullifier,
+      };
+    }
+
+    const rotatedPrevious = state.identityNullifier;
+    set({
+      identityNullifier: next,
+      previousIdentityNullifier: rotatedPrevious,
+    });
+
+    // Mirror onto the users[] row for the current session, so the
+    // admin DB view and any other surface that reads identityNullifierHex
+    // off the row stays consistent with the slice. A row at
+    // currentUserId is expected (register() seeds it); when absent
+    // the .map is naturally a no-op and the slice update still stands.
+    set((s) => ({
+      users: s.users.map((u) =>
+        u.id === s.currentUserId
+          ? {
+              ...u,
+              identityNullifierHex: next,
+              previousIdentityNullifierHex: rotatedPrevious,
+            }
+          : u,
+      ),
+    }));
+
+    return {
+      changed: true,
+      identityNullifier: next,
+      previousIdentityNullifier: rotatedPrevious,
+    };
+  },
 });

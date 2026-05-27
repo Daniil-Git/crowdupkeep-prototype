@@ -76,6 +76,11 @@ export interface UiUser {
   // nullifier from the identity slice in their place.
   identityNullifierHex: string;
   loginNullifierHex: string;
+  // Most recent prior identityNullifierHex from before the latest
+  // re-upload. Optional — present only on rows whose owner has gone
+  // through reuploadIdentity at least once. Display-only audit slot;
+  // does NOT gate authentication.
+  previousIdentityNullifierHex?: string | null;
   role: "admin" | "citizen";
 }
 
@@ -407,7 +412,7 @@ const safeStorage = (): StateStorage =>
     : noopStorage;
 
 export const STORAGE_KEY = "crowdupkeep-state-v1";
-export const STORAGE_VERSION = 8;
+export const STORAGE_VERSION = 9;
 
 // Returns the "fresh from seeds" snapshot used both at first hydrate
 // and on every hard-reset migration. Exposed for tests so the migrate
@@ -426,6 +431,7 @@ export function freshSeedState(): Pick<
   | "selectedDistrict"
   | "username"
   | "identityNullifier"
+  | "previousIdentityNullifier"
   | "loginNullifier"
   | "isAuthenticated"
   | "ownershipPublicKey"
@@ -574,6 +580,18 @@ export function migrateState(
       } as AppState;
     }
   }
+  // v9 introduces previousIdentityNullifier (slice) and the optional
+  // previousIdentityNullifierHex column on each users[] row. Both are
+  // null/undefined for snapshots predating their first re-upload, so
+  // there is no destructive migration to run — the v<7 branch above
+  // already spreads identityInitialState (which now carries
+  // previousIdentityNullifier: null), and the column on UiUser is
+  // optional so old rows hydrate cleanly without it. Branch left
+  // explicit so a future v10+ schema change doesn't quietly collapse
+  // the version chain.
+  if (fromVersion < 9) {
+    // no-op
+  }
   return state;
 }
 
@@ -598,6 +616,11 @@ export const useAppStore = create<AppState>()(
       // device". The nullifiers are one-way PBKDF2 outputs.
       username: state.username,
       identityNullifier: state.identityNullifier,
+      // Most-recent prior identity nullifier from before the latest
+      // reuploadIdentity rotation. Persist so the rotation survives a
+      // reload — without this, a refresh after a re-upload would
+      // forget the previous binding.
+      previousIdentityNullifier: state.previousIdentityNullifier,
       loginNullifier: state.loginNullifier,
       isAuthenticated: state.isAuthenticated,
       role: state.role,

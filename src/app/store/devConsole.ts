@@ -240,6 +240,17 @@ const api = {
   // anywhere without navigating to a logout-bearing surface.
   logout: () => useAppStore.getState().logout(),
 
+  // Re-upload the citizen ID for the live session. Rotates the
+  // identity nullifier slot (current → previous, new → current).
+  // Login credentials are NOT touched. Useful for demoing the
+  // audit-history slot from the console:
+  //   cu.reuploadIdentity("1234567890")           // first bind already done
+  //   cu.reuploadIdentity("9876543210")           // rotates
+  //   cu.state().previousIdentityNullifier         // = first hex
+  //   cu.state().identityNullifier                  // = new hex
+  reuploadIdentity: (rawCitizenId: string) =>
+    useAppStore.getState().reuploadIdentity({ rawCitizenId }),
+
   // Direct access for power use: cu.store.subscribe(...), etc.
   store: useAppStore,
 };

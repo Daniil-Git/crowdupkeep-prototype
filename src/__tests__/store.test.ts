@@ -427,14 +427,14 @@ describe("seed catalogue (v4 invariants)", () => {
   });
 });
 
-describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 seeds)", () => {
+describe("persist migrate (v9 — re-upload audit slot; no destructive payload)", () => {
   // The migrate function is the only way persisted snapshots from
   // earlier devConsole / catalogue shapes get cleaned up on a real
   // user's browser. Exercising it directly is the cheap way to keep
   // it honest without spelunking through Zustand's internal hydrate.
 
   it("STORAGE_VERSION is the current target", () => {
-    expect(STORAGE_VERSION).toBe(8);
+    expect(STORAGE_VERSION).toBe(9);
   });
 
   it("freshSeedState returns the canonical 'just installed' snapshot (incl. identity defaults)", () => {
@@ -444,9 +444,10 @@ describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 s
     expect(seed.selectedDistrict).toBe(ALL_LOCATIONS);
     expect(seed.reports.length).toBeGreaterThan(0);
     expect(seed.rewards.length).toBeGreaterThan(0);
-    // Identity slice defaults — newly added in v5, extended in v7.
+    // Identity slice defaults — newly added in v5, extended in v7 & v9.
     expect(seed.username).toBeNull();
     expect(seed.identityNullifier).toBeNull();
+    expect(seed.previousIdentityNullifier).toBeNull();
     expect(seed.loginNullifier).toBeNull();
     expect(seed.isAuthenticated).toBe(false);
     expect(seed.ownershipPublicKey).toBeNull();
@@ -506,6 +507,7 @@ describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 s
     // New identity slots come up at their defaults.
     expect(migrated.username).toBeNull();
     expect(migrated.identityNullifier).toBeNull();
+    expect(migrated.previousIdentityNullifier).toBeNull();
     expect(migrated.loginNullifier).toBeNull();
     expect(migrated.isAuthenticated).toBe(false);
     expect(migrated.ownershipPublicKey).toBeNull();
@@ -544,6 +546,7 @@ describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 s
     // password check in the v6 login flow.
     expect(migrated.username).toBeNull();
     expect(migrated.identityNullifier).toBeNull();
+    expect(migrated.previousIdentityNullifier).toBeNull();
     expect(migrated.loginNullifier).toBeNull();
     expect(migrated.isAuthenticated).toBe(false);
     expect(migrated.ownershipPublicKey).toBeNull();
@@ -681,6 +684,54 @@ describe("persist migrate (v8 — scrub the literal 'you' username from pre-v8 s
     expect(civicHeroRows[0].loginNullifierHex).toBe("ee".repeat(32));
     // The placeholder at id=7 is renamed but otherwise left alone.
     expect(migrated.users.find((u) => u.id === 7)!.username).toBe("demo_user");
+  });
+
+  it("v8 → v9 is a non-destructive pass-through (previousIdentityNullifier defaults to null; users[] row stays valid)", () => {
+    // v9 introduces two optional slots: identity-slice
+    // `previousIdentityNullifier` and per-row
+    // `previousIdentityNullifierHex`. A v8 snapshot has neither, but
+    // both are nullable/optional — so the migration must NOT clobber
+    // any existing state, just thread the snapshot through unchanged.
+    const v8Snapshot = {
+      currentUserId: 7,
+      users: [
+        { id: 7, username: "wreakage_fixer", email: "wreakage_fixer@limassol.cy", xp: 1250, streak: 5, avatar: "x", role: "citizen", identityNullifierHex: "ff".repeat(32), loginNullifierHex: "ee".repeat(32) },
+      ],
+      reports: [
+        { id: 6, title: "kept", description: "", difficulty: 2, status: "pending", geometry: { lat: 34.6, lng: 33.0 }, address: "x", createdById: 7, createdByName: "wreakage_fixer", createdAt: "", photos: [], comments: [], solutions: [] },
+      ],
+      rewards: [],
+      redeemedVouchers: [],
+      bannedUsernames: ["someone"],
+      selectedDistrict: ALL_LOCATIONS,
+      username: "wreakage_fixer",
+      identityNullifier: "ff".repeat(32),
+      loginNullifier: "ee".repeat(32),
+      isAuthenticated: true,
+      role: "citizen",
+      ownershipPublicKey: '{"kty":"OKP"}',
+      totpSecret: null,
+      adminVerified: false,
+    };
+    const migrated = migrateState(v8Snapshot, 8);
+    // Everything from v8 survives byte-for-byte.
+    expect(migrated.currentUserId).toBe(7);
+    expect(migrated.users[0].username).toBe("wreakage_fixer");
+    expect(migrated.users[0].identityNullifierHex).toBe("ff".repeat(32));
+    expect(migrated.users[0].loginNullifierHex).toBe("ee".repeat(32));
+    expect(migrated.reports[0].title).toBe("kept");
+    expect(migrated.bannedUsernames).toEqual(["someone"]);
+    expect(migrated.username).toBe("wreakage_fixer");
+    expect(migrated.loginNullifier).toBe("ee".repeat(32));
+    expect(migrated.ownershipPublicKey).toBe('{"kty":"OKP"}');
+    expect(migrated.isAuthenticated).toBe(true);
+    // The new slot is undefined OR null on the migrated snapshot — both
+    // are acceptable; the runtime treats them identically. We assert
+    // the falsy interpretation so a future migration that initialises
+    // to null doesn't fail this test, and the optional column on the
+    // user row stays absent until a re-upload actually populates it.
+    expect(migrated.previousIdentityNullifier ?? null).toBeNull();
+    expect(migrated.users[0].previousIdentityNullifierHex ?? null).toBeNull();
   });
 
   it("v6 → v7 INVALIDATES a stored loginNullifier with no matching ownership key (forces re-register)", () => {

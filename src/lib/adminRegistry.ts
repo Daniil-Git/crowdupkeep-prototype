@@ -16,20 +16,37 @@
 import type { UiUser } from "@/app/store/appStore";
 
 export interface AnonymizedRegistryRow {
+  // Stable numeric id for the # column. Pulled straight from
+  // UiUser.id for seed/overlay rows. For the "append" branch (a
+  // session user not present in users[]), this is the session's
+  // currentUserId, or null when none was provided.
+  id: number | null;
   username: string;
   identityNullifierHex: string;
   loginNullifierHex: string;
+  // Most-recent prior identity binding (set by reuploadIdentity). Null
+  // for rows whose owner has never re-uploaded — those will render the
+  // `—` placeholder in the admin table.
+  previousIdentityNullifierHex: string | null;
   role: "admin" | "citizen";
 }
 
 export interface IdentitySessionInput {
   username: string | null;
   identityNullifier: string | null;
+  // Most-recent prior identity nullifier from the slice. When the
+  // session overlays an existing row, this overlays the matching
+  // previousIdentityNullifierHex column too.
+  previousIdentityNullifier: string | null;
   loginNullifier: string | null;
   // Role of the live session — only used to set role on a newly-appended
   // row when the session user does not exist in the seed list. For an
   // overlay onto an existing row, the seed user's role is the one shown.
   role: "admin" | "citizen" | null;
+  // Numeric id stamped onto the appended row when the session user is
+  // not in users[]. Ignored on the overlay branch (the matched seed
+  // user's id is used). Null when no session is active.
+  currentUserId: number | null;
 }
 
 export function buildAnonymizedRegistry(
@@ -39,9 +56,11 @@ export function buildAnonymizedRegistry(
   // Start with the seed users projected down to ONLY the anonymized
   // columns. Anything else from UiUser is intentionally dropped here.
   const rows: AnonymizedRegistryRow[] = users.map((u) => ({
+    id: u.id,
     username: u.username,
     identityNullifierHex: u.identityNullifierHex,
     loginNullifierHex: u.loginNullifierHex,
+    previousIdentityNullifierHex: u.previousIdentityNullifierHex ?? null,
     role: u.role,
   }));
 
@@ -64,6 +83,9 @@ export function buildAnonymizedRegistry(
       ...rows[existing],
       identityNullifierHex: session.identityNullifier,
       loginNullifierHex: session.loginNullifier,
+      // Overlay the prior-binding column too — the slice is the live
+      // source of truth for the most-recent prior identity nullifier.
+      previousIdentityNullifierHex: session.previousIdentityNullifier,
     };
     return rows;
   }
@@ -74,9 +96,11 @@ export function buildAnonymizedRegistry(
   // session role is null — should not happen post-register, but
   // defensive).
   rows.push({
+    id: session.currentUserId,
     username: session.username,
     identityNullifierHex: session.identityNullifier,
     loginNullifierHex: session.loginNullifier,
+    previousIdentityNullifierHex: session.previousIdentityNullifier,
     role: session.role ?? "citizen",
   });
   return rows;

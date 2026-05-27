@@ -34,8 +34,12 @@ export function AdminDatabaseView() {
   const users = useAppStore((s) => s.users);
   const sessionUsername = useAppStore((s) => s.username);
   const sessionIdentityNullifier = useAppStore((s) => s.identityNullifier);
+  const sessionPreviousIdentityNullifier = useAppStore(
+    (s) => s.previousIdentityNullifier,
+  );
   const sessionLoginNullifier = useAppStore((s) => s.loginNullifier);
   const sessionRole = useAppStore((s) => s.role);
+  const sessionCurrentUserId = useAppStore((s) => s.currentUserId);
   const adminVerified = useAppStore((s) => s.adminVerified);
   const promoteToAdmin = useAppStore((s) => s.promoteToAdmin);
   const demoteFromAdmin = useAppStore((s) => s.demoteFromAdmin);
@@ -74,10 +78,20 @@ export function AdminDatabaseView() {
       buildAnonymizedRegistry(users, {
         username: sessionUsername,
         identityNullifier: sessionIdentityNullifier,
+        previousIdentityNullifier: sessionPreviousIdentityNullifier,
         loginNullifier: sessionLoginNullifier,
         role: sessionRole,
+        currentUserId: sessionCurrentUserId,
       }),
-    [users, sessionUsername, sessionIdentityNullifier, sessionLoginNullifier, sessionRole],
+    [
+      users,
+      sessionUsername,
+      sessionIdentityNullifier,
+      sessionPreviousIdentityNullifier,
+      sessionLoginNullifier,
+      sessionRole,
+      sessionCurrentUserId,
+    ],
   );
 
   // Gate 1: TOTP MFA. The TOTP component handles its own enrolment
@@ -146,9 +160,11 @@ export function AdminDatabaseView() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
+                <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">#</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Username</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Login Nullifier (hex)</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Identity Nullifier (hex)</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Prev Identity (hex)</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Role</th>
                 <th className="text-right px-3 py-2 font-medium text-gray-700 whitespace-nowrap">Actions</th>
               </tr>
@@ -168,6 +184,9 @@ export function AdminDatabaseView() {
                         : "border-b last:border-0 hover:bg-gray-50"
                     }
                   >
+                    <td className="px-3 py-2 font-mono text-xs text-gray-500 whitespace-nowrap">
+                      {row.id ?? "—"}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {row.username}
                       {isCurrentUser && (
@@ -179,6 +198,9 @@ export function AdminDatabaseView() {
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-gray-700 whitespace-nowrap">
                       {truncateHex(row.identityNullifierHex)}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-gray-600 whitespace-nowrap">
+                      {truncateHex(row.previousIdentityNullifierHex)}
                     </td>
                     <td className="px-3 py-2">
                       <Badge

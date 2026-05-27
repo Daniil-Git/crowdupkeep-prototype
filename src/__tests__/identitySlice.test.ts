@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAppStore } from "@/app/store/appStore";
-import { deriveLoginNullifier } from "@/lib/identity";
+import { deriveIdentityNullifier, deriveLoginNullifier } from "@/lib/identity";
 import { totpCode } from "@/lib/totp";
 
 // The identity slice is wired into the main store, so we exercise it
@@ -943,5 +943,202 @@ describe("identitySlice — role-based access", () => {
 
   it("role is null before any registration", () => {
     expect(useAppStore.getState().role).toBeNull();
+  });
+});
+
+describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
+  // The re-upload action takes a fresh citizen ID, re-derives the
+  // identity nullifier from it, and rotates the slot:
+  //   previousIdentityNullifier ← old identityNullifier
+  //   identityNullifier         ← new derivation
+  // Login credentials (loginNullifier, ownershipPublicKey) are NOT
+  // touched. The action is gated behind an authenticated session.
+
+  it("REJECTS re-upload before registration (no current identity to rotate)", async () => {
+    expect(useAppStore.getState().identityNullifier).toBeNull();
+    expect(useAppStore.getState().loginNullifier).toBeNull();
+    await expect(
+      useAppStore.getState().reuploadIdentity({ rawCitizenId: "1234567890" }),
+    ).rejects.toThrow(/before registration/);
+  });
+
+  it("REJECTS malformed citizen IDs (CypriotIdFormatError surfaces 10-digit message)", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    await expect(
+      useAppStore.getState().reuploadIdentity({ rawCitizenId: "abc" }),
+    ).rejects.toThrow(/10 digits/);
+    // Slice unchanged after a rejected re-upload.
+    const initial = await deriveIdentityNullifier("1234567890");
+    expect(useAppStore.getState().identityNullifier).toBe(initial);
+    expect(useAppStore.getState().previousIdentityNullifier).toBeNull();
+  });
+
+  it("ROTATES on first re-upload — current → previous, new → current", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    const initial = useAppStore.getState().identityNullifier!;
+    expect(useAppStore.getState().previousIdentityNullifier).toBeNull();
+
+    const result = await useAppStore.getState().reuploadIdentity({
+      rawCitizenId: "9876543210",
+    });
+
+    const expectedNew = await deriveIdentityNullifier("9876543210");
+    expect(result.changed).toBe(true);
+    expect(result.identityNullifier).toBe(expectedNew);
+    expect(result.previousIdentityNullifier).toBe(initial);
+
+    const s = useAppStore.getState();
+    expect(s.identityNullifier).toBe(expectedNew);
+    expect(s.previousIdentityNullifier).toBe(initial);
+  });
+
+  it("ROTATES on second re-upload — previous slot holds the most recent prior, NOT the initial", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    const initial = useAppStore.getState().identityNullifier!;
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+    const second = useAppStore.getState().identityNullifier!;
+    expect(second).not.toBe(initial);
+
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "5555555555" });
+
+    const expectedThird = await deriveIdentityNullifier("5555555555");
+    const s = useAppStore.getState();
+    expect(s.identityNullifier).toBe(expectedThird);
+    // Previous slot holds the SECOND nullifier, not the initial one —
+    // a rotation, not an append-only log.
+    expect(s.previousIdentityNullifier).toBe(second);
+    expect(s.previousIdentityNullifier).not.toBe(initial);
+  });
+
+  it("NO-OP when the new canonical ID resolves to the same nullifier (does NOT pollute previous slot)", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    const initial = useAppStore.getState().identityNullifier!;
+    expect(useAppStore.getState().previousIdentityNullifier).toBeNull();
+
+    // Re-upload the SAME ID — different surface (with dashes), same
+    // canonical. The slot must not rotate because that would clobber
+    // the previous slot with a duplicate of the current value.
+    const result = await useAppStore.getState().reuploadIdentity({
+      rawCitizenId: "12-34 56 78-90",
+    });
+    expect(result.changed).toBe(false);
+    expect(result.identityNullifier).toBe(initial);
+    expect(result.previousIdentityNullifier).toBeNull();
+
+    const s = useAppStore.getState();
+    expect(s.identityNullifier).toBe(initial);
+    expect(s.previousIdentityNullifier).toBeNull();
+  });
+
+  it("MIRRORS the rotation onto users[currentUserId] (identityNullifierHex + previousIdentityNullifierHex)", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    const initial = useAppStore.getState().identityNullifier!;
+    // Sanity: register() seeded the row hex with the initial nullifier,
+    // previous hex column starts undefined/null.
+    const rowBefore = useAppStore.getState().users.find(
+      (u) => u.id === useAppStore.getState().currentUserId,
+    )!;
+    expect(rowBefore.identityNullifierHex).toBe(initial);
+    expect(rowBefore.previousIdentityNullifierHex ?? null).toBeNull();
+
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+
+    const expectedNew = await deriveIdentityNullifier("9876543210");
+    const rowAfter = useAppStore.getState().users.find(
+      (u) => u.id === useAppStore.getState().currentUserId,
+    )!;
+    expect(rowAfter.identityNullifierHex).toBe(expectedNew);
+    expect(rowAfter.previousIdentityNullifierHex).toBe(initial);
+  });
+
+  it("DOES NOT touch login credentials (loginNullifier + ownershipPublicKey survive verbatim)", async () => {
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    const before = useAppStore.getState();
+    const loginNullifierBefore = before.loginNullifier;
+    const publicKeyBefore = before.ownershipPublicKey;
+
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+
+    const after = useAppStore.getState();
+    expect(after.loginNullifier).toBe(loginNullifierBefore);
+    expect(after.ownershipPublicKey).toBe(publicKeyBefore);
+  });
+
+  it("DOES NOT flip isAuthenticated / role / adminVerified", async () => {
+    await useAppStore.getState().register({
+      username: "civic_hero",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    await useAppStore.getState().promoteToAdmin("civic_hero");
+    useAppStore.setState({ adminVerified: true });
+    const before = useAppStore.getState();
+    expect(before.isAuthenticated).toBe(true);
+    expect(before.role).toBe("admin");
+    expect(before.adminVerified).toBe(true);
+
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+
+    const after = useAppStore.getState();
+    expect(after.isAuthenticated).toBe(true);
+    expect(after.role).toBe("admin");
+    expect(after.adminVerified).toBe(true);
+  });
+
+  it("PRESERVES login behaviour — username + password still authenticates after a re-upload", async () => {
+    // The whole point of decoupling identity rotation from login: a
+    // citizen who rebinds their ID can still log back in with their
+    // original password. If this ever breaks, the rotation has
+    // accidentally clobbered the credential triple.
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+    useAppStore.setState({ isAuthenticated: false });
+    const ok = await useAppStore.getState().login({
+      username: "alice",
+      password: "hunter2",
+    });
+    expect(ok).toBe(true);
+  });
+
+  it("DERIVATION is independent — re-upload nullifier equals deriveIdentityNullifier(newCanonical)", async () => {
+    // Pins down that the slice didn't apply any extra transformation
+    // on top of the lib helper — a future refactor that introduces a
+    // hidden salt would fail this test.
+    await useAppStore.getState().register({
+      username: "alice",
+      password: "hunter2",
+      rawCitizenId: "1234567890",
+    });
+    await useAppStore.getState().reuploadIdentity({ rawCitizenId: "9876543210" });
+    const independently = await deriveIdentityNullifier("9876543210");
+    expect(useAppStore.getState().identityNullifier).toBe(independently);
   });
 });

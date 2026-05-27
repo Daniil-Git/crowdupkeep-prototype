@@ -8,7 +8,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { toast } from "sonner";
 import { useAppStore } from "../store/appStore";
 import { LocationDropdown } from "./LocationDropdown";
+import { IdentityInput } from "./IdentityInput";
 import { matchesFilter } from "@/lib/districts";
+import { CypriotIdFormatError } from "@/lib/cypriotId";
 
 // Synthetic XP curve trailing the user's current balance — keeps the chart
 // meaningful as the live XP changes from accepted solutions.
@@ -33,12 +35,22 @@ export function Profile() {
   const redeemedVouchers = useAppStore((s) => s.redeemedVouchers);
   const selectedDistrict = useAppStore((s) => s.selectedDistrict);
   const logout = useAppStore((s) => s.logout);
-  const [idPhoto, setIdPhoto] = useState<File | null>(null);
+  const reuploadIdentity = useAppStore((s) => s.reuploadIdentity);
   // The Re-upload modal is controlled so the success handler can close it
   // explicitly. The previous uncontrolled DialogTrigger pattern left the
   // modal open after a successful submit, contradicting the toast.
   const [reuploadOpen, setReuploadOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  // The IdentityInput hands back the canonical 10-digit string once
+  // validated. Only that value ever leaves the input component — see
+  // IdentityInput.tsx for the no-image-bytes-ever invariant.
+  const [reuploadCanonical, setReuploadCanonical] = useState<string | null>(null);
+  // Mount the IdentityInput under a fresh key each time the modal
+  // opens so closing-and-reopening starts from a clean text/photo
+  // state. Without this, the previous typed value or photo preview
+  // lingers across opens — surprising for a "re-upload" action that
+  // should feel like a discrete event each time.
+  const [reuploadKey, setReuploadKey] = useState(0);
 
   const myReports = useMemo(
     () =>
@@ -50,15 +62,26 @@ export function Profile() {
   const xpHistory = useMemo(() => buildXpHistory(me.xp), [me.xp]);
 
   const handleReuploadID = async () => {
-    if (!idPhoto || verifying) return;
+    if (!reuploadCanonical || verifying) return;
     setVerifying(true);
-    // Simulated verification — short delay so the user perceives the
-    // submit as a deliberate action rather than an instant flash.
-    await new Promise((r) => setTimeout(r, 600));
-    setVerifying(false);
-    setReuploadOpen(false);
-    setIdPhoto(null);
-    toast.success("ID re-uploaded and verified!");
+    try {
+      const result = await reuploadIdentity({ rawCitizenId: reuploadCanonical });
+      if (result.changed) {
+        toast.success("Identity re-uploaded. Previous binding archived.");
+      } else {
+        toast.info("Same ID as currently bound — no change made.");
+      }
+      setReuploadOpen(false);
+      setReuploadCanonical(null);
+      // Force the IdentityInput to unmount so the next open is clean.
+      setReuploadKey((k) => k + 1);
+    } catch (err) {
+      if (err instanceof CypriotIdFormatError) toast.error(err.message);
+      else if (err instanceof Error) toast.error(err.message);
+      else toast.error("Re-upload failed");
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
@@ -208,7 +231,10 @@ export function Profile() {
             onOpenChange={(next) => {
               if (verifying) return; // don't allow closing mid-verification
               setReuploadOpen(next);
-              if (!next) setIdPhoto(null);
+              if (!next) {
+                setReuploadCanonical(null);
+                setReuploadKey((k) => k + 1);
+              }
             }}
           >
             <DialogContent className="max-w-[340px]">
@@ -217,29 +243,29 @@ export function Profile() {
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <p className="text-sm text-gray-600">
-                  Update your identity document if needed.
+                  Submitting a new Cypriot ID re-derives your identity
+                  binding. Your login password and access are not changed.
                 </p>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <Upload className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setIdPhoto(e.target.files?.[0] || null)}
-                    className="hidden"
-                    id="profile-id-upload"
-                  />
-                  <label htmlFor="profile-id-upload" className="cursor-pointer">
-                    <span className="text-sm text-[#1976D2]">
-                      {idPhoto ? idPhoto.name : "Choose file or take photo"}
-                    </span>
-                  </label>
-                </div>
+                {/*
+                  The same component the Register flow uses — tabbed
+                  text-only vs photo-plus-text modes, both producing the
+                  same canonical 10-digit string. Wiring re-upload
+                  through it keeps both paths on a single cryptographic
+                  pipeline (canonicalise → PBKDF2 identity nullifier).
+                */}
+                <IdentityInput
+                  key={reuploadKey}
+                  onCanonicalReady={setReuploadCanonical}
+                  onCanonicalCleared={() => setReuploadCanonical(null)}
+                  disabled={verifying}
+                  label="New Cypriot National ID"
+                />
                 <Button
                   className="w-full bg-[#1976D2] hover:bg-[#1565C0]"
                   onClick={handleReuploadID}
-                  disabled={!idPhoto || verifying}
+                  disabled={!reuploadCanonical || verifying}
                 >
-                  {verifying ? "Verifying…" : "Submit for Verification"}
+                  {verifying ? "Re-binding identity…" : "Submit re-upload"}
                 </Button>
               </div>
             </DialogContent>
