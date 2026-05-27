@@ -1082,12 +1082,28 @@ Folded into the same commit, not a separate round:
   views use the alias, audit-style views render raw) is
   enforced by code inspection.
 - `cu.becomeUser(username, password?, rawCitizenId?)` added to
-  the dev console. One-call shortcut that delegates to
-  `register()` so the manual `cu.setState({...})` pattern (which
-  leaves four auth-flow gaps — no PBKDF2 hex, no Ed25519
-  ownership key, no `isAuthenticated`, no `role`) is no longer
-  the only path to assume an identity for a demo. Logout / re-
-  login works for the assumed user without further setup.
+  the dev console. One-call shortcut that closes the four auth-
+  flow gaps the older two-`cu.setState` pattern left behind (no
+  PBKDF2 hex, no Ed25519 ownership key, no `isAuthenticated`,
+  no `role`). **Non-destructive by default**: with no second
+  argument, the call reuses stored credentials when they exist
+  for the requested username (flips `isAuthenticated: true`,
+  aligns `currentUserId` to the matching `users[]` slot, leaves
+  the credential triple verbatim — re-login through the UI on
+  the original password continues to work) or, if no credentials
+  exist, logs a console warning and changes nothing. The only
+  way to rewrite stored credentials is to pass an explicit
+  password as the second argument; that is the documented
+  consent signal for a full re-register. Typo-grade calls and
+  fresh-install demos therefore cannot accidentally obliterate
+  a working `wreakage_fixer` session.
+  Third-argument `rawCitizenId` defaults to a deterministic
+  djb2-of-username 10-digit string, so two `becomeUser` calls
+  with different usernames do not silently produce the same
+  identity nullifier hex (the identity derivation is a pure
+  function of the citizen ID, and the previous hard-coded
+  default `"1234567890"` made every assumed user share the
+  same identity hex).
 - Three isolated TS 5.7+ assignability errors resolved by
   casting `Uint8Array` arguments to `BufferSource` at the
   `crypto.subtle.{importKey, sign, verify}` call sites in

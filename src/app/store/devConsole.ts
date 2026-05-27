@@ -24,6 +24,21 @@ function resolveYouSentinel(username?: string): string | null {
   return explicit;
 }
 
+// Deterministic-from-username citizen ID. djb2 hash → uint32 →
+// zero-padded 10-digit string. Two cu.becomeUser calls with
+// different usernames produce distinct identity nullifier hexes by
+// default because identityNullifier = PBKDF2(canonicalCitizenId) is
+// a pure function of the citizen ID. The output always passes
+// canonicalizeOrThrow's /^\d{10}$/ check (uint32 max = 4 294 967 295
+// = 10 digits; padStart handles smaller hashes).
+function devCitizenIdFor(username: string): string {
+  let h = 5381;
+  for (let i = 0; i < username.length; i++) {
+    h = ((h << 5) + h + username.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString().padStart(10, "0").slice(-10);
+}
+
 const api = {
   // Snapshot of the full live store state.
   state: () => useAppStore.getState(),
@@ -96,30 +111,69 @@ const api = {
     location.reload();
   },
 
-  // Single-call shortcut to fully assume a user identity for demos.
-  // Two `cu.setState({...})` calls (one for `username`, one for
-  // `currentUserId`) make the surfaces APPEAR aligned but leave four
-  // auth-flow gaps behind: no PBKDF2 nullifier hex, no Ed25519
-  // ownership keypair, no `isAuthenticated`, no `role`. Logout / re-
-  // login then fail because the login flow has nothing to verify
-  // against. `becomeUser` closes all four gaps by going through the
-  // proper `register()` action — real PBKDF2 derivation, real
-  // ownership keypair, identity slice fully populated, and the
-  // register-time users[] sync (adopts the matching seed slot when
-  // the username collides, or overlays the placeholder at
-  // currentUserId otherwise). After return, login/logout works for
-  // this user without further setup.
+  // Single-call shortcut to assume a user identity for demos.
+  // Non-destructive by default — typo-grade calls cannot rewrite the
+  // credential triple. Two modes selected by the second argument:
   //
-  // Defaults keep the dev console one-liner short; override either
-  // arg to exercise a different credential combination.
+  //   - Second argument OMITTED:
+  //       cu.becomeUser("wreakage_fixer")
+  //     Reuse path. If a credential triple is already persisted on
+  //     disk for that exact username, flip `isAuthenticated: true`,
+  //     align `currentUserId` to the matching users[] slot, and
+  //     leave loginNullifier / ownershipPublicKey / identityNullifier
+  //     untouched — re-login through the UI keeps working on the
+  //     original password. If no credentials exist for that
+  //     username, a console warning is logged and **no state is
+  //     changed** — the caller can retry with an explicit password
+  //     if they actually want to register.
   //
-  // Example: cu.becomeUser("civic_hero")
-  // Example: cu.becomeUser("wreakage_fixer", "my_demo_password")
-  becomeUser: (
+  //   - Second argument = an explicit PASSWORD string:
+  //       cu.becomeUser("wreakage_fixer", "my_real_password")
+  //     Full register through the store action — PBKDF2 nullifiers,
+  //     Ed25519 ownership keypair, identity slice population, the
+  //     register-time users[] sync. This OVERWRITES any previously
+  //     stored credentials for the username; passing a password is
+  //     the explicit consent signal.
+  //
+  // Third argument (rawCitizenId) defaults to a deterministic-from-
+  // username 10-digit hash so two distinct usernames do not collide
+  // on the same identity nullifier hex by default (the identity
+  // derivation is a pure function of the citizen ID).
+  becomeUser: async (
     username: string,
-    password: string = "demo123",
-    rawCitizenId: string = "1234567890",
-  ) => useAppStore.getState().register({ username, password, rawCitizenId }),
+    password?: string,
+    rawCitizenId: string = devCitizenIdFor(username),
+  ) => {
+    if (password === undefined) {
+      const state = useAppStore.getState();
+      if (
+        state.username === username &&
+        state.loginNullifier !== null &&
+        state.ownershipPublicKey !== null
+      ) {
+        const slot = state.users.find((u) => u.username === username);
+        useAppStore.setState({
+          isAuthenticated: true,
+          ...(slot ? { currentUserId: slot.id } : {}),
+        });
+        // eslint-disable-next-line no-console
+        console.info(
+          `[cu] reused stored credentials for "${username}". isAuthenticated=true; loginNullifier / ownershipPublicKey / identityNullifier untouched.`,
+        );
+        return { reused: true, registered: false, username };
+      }
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[cu] no credentials persisted for "${username}" on this device — no state was changed. Retry with an explicit password to register: cu.becomeUser("${username}", "yourPassword").`,
+      );
+      return { reused: false, registered: false, username };
+    }
+
+    // Explicit-password path: full register. May overwrite prior
+    // stored credentials for this username — that is the documented
+    // contract of passing a password.
+    return useAppStore.getState().register({ username, password, rawCitizenId });
+  },
 
   // Identity-aware helpers — added when the admin DB view shipped.
   //
