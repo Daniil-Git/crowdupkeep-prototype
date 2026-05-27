@@ -3,13 +3,17 @@ import { haversineKm, type LatLng } from "@/lib/geo";
 
 // Minimal shape this picker needs from a report. Kept narrow so any future
 // report-like value (raw API row, store entry, ad-hoc test fixture) plugs in
-// without coupling to the full UiReport interface.
+// without coupling to the full UiReport interface. No `[key: string]: unknown`
+// index signature — TS structural subtyping already permits extra fields on
+// arguments, and the explicit signature was making concrete types with
+// non-unknown-assignable shapes (`UiReport`'s nested `comments`/`solutions`)
+// fail the index-signature check on TS 5.x, cascading into "type '{}' is not
+// assignable to number" errors at the `picked.report.difficulty` call sites.
 export interface NearbyCandidate {
   id: number;
   status: "pending" | "in-progress" | "solved";
   address: string;
   geometry: LatLng;
-  [key: string]: unknown;
 }
 
 export type NearbyPick<T extends NearbyCandidate> =

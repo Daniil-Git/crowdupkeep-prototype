@@ -26,6 +26,14 @@ import {
   verifySignature,
 } from "@/lib/ownership";
 import { generateSecret, provisioningUri, verifyTotp } from "@/lib/totp";
+// Type-only — no runtime cycle. The identity slice is composed INTO
+// the outer AppState in appStore.ts; at runtime the set/get passed
+// in are wide enough to touch users[]/reports[]/currentUserId, but
+// the StateCreator<IdentitySlice> typing narrows them to identity
+// fields only. The mixin below declares the outer-access contract
+// statically so the register-time sync + the promote/demote actions
+// can read those fields without per-call casts.
+import type { UiReport, UiUser } from "./appStore";
 
 export interface IdentityState {
   username: string | null;
@@ -116,6 +124,19 @@ export interface IdentityActions {
 }
 
 export type IdentitySlice = IdentityState & IdentityActions;
+
+// Static-only declaration of the fields the identity slice reaches
+// into on the merged outer state (the gamification slice in
+// appStore.ts owns them at runtime). Used purely for the
+// StateCreator's set/get typing so the in-slice register-time sync,
+// promoteToAdmin / demoteFromAdmin registry writes, and the
+// users[]-overlay logic can access these fields directly instead of
+// per-call casts.
+interface OuterDataAccess {
+  users: UiUser[];
+  reports: UiReport[];
+  currentUserId: number;
+}
 
 export const TOTP_ISSUER = "CrowdUpKeep";
 
@@ -220,7 +241,17 @@ async function mockAuthLoginApi(params: {
   return verifySignature(publicKeyJwk, challengeNonceHex, signatureHex);
 }
 
-export const createIdentitySlice: StateCreator<IdentitySlice> = (set, get, store) => ({
+// StateCreator's 4th generic is the slice's return shape; the 1st
+// is what set/get operate on. We widen the 1st to include
+// OuterDataAccess so the slice body can touch users[] etc. without
+// casting, while still returning only IdentitySlice (the slice
+// doesn't own those fields).
+export const createIdentitySlice: StateCreator<
+  IdentitySlice & OuterDataAccess,
+  [],
+  [],
+  IdentitySlice
+> = (set, get, store) => ({
   ...identityInitialState,
 
   register: async ({ username, password, rawCitizenId }) => {

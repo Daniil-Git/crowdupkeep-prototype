@@ -1120,3 +1120,46 @@ Folded into the same commit, not a separate round:
   archives, verification notes). The leading `/` confines each
   pattern to repo root so a legitimate same-extension file
   under `src/`, `public/`, `prisma/`, etc. is unaffected.
+
+### Round 10 type-only cleanup (chore)
+
+Three independent type-system fixes that take `tsc --noEmit`
+from 47 errors to 0. No runtime behaviour changed — every fix
+is purely at the static-type layer; the test suite (204/204)
+is unchanged.
+
+- **`NearbyCandidate` index signature dropped (23 errors).**
+  `src/lib/nearby.ts:7-13` previously carried
+  `[key: string]: unknown`, which on TS 5.x makes the concrete
+  `UiReport` (with nested `comments`/`solutions` arrays) fail
+  the index-signature assignability check, cascading into the
+  notorious `"type '{}' is not assignable to number"` errors at
+  `picked.report.difficulty` call sites. Structural subtyping
+  already permits extra fields on arguments; the index
+  signature was redundantly restrictive. Removing the line
+  also unblocks the `T extends NearbyCandidate` narrowing so
+  `pickNearbyReport` callers continue to get a `UiReport`-
+  typed `picked.report` downstream.
+
+- **`createIdentitySlice` StateCreator widened (22 errors).**
+  `src/app/store/identitySlice.ts:233-238` previously used
+  `StateCreator<IdentitySlice>`, which narrowed `set`/`get` to
+  the identity-only shape — but the slice body legitimately
+  reaches into `users[]`, `reports[]`, and `currentUserId`
+  (which the gamification slice owns and the merged outer
+  AppState carries at runtime). A new `OuterDataAccess`
+  mixin declares those three fields type-only; the creator's
+  1st generic widens to `IdentitySlice & OuterDataAccess` so
+  set/get can touch them, while the 4th generic stays at
+  `IdentitySlice` so the slice still returns only its own
+  fields. The mixin pulls `UiReport` / `UiUser` via
+  `import type` (no runtime cycle).
+
+- **Prisma `InputJsonValue` casts (2 errors).**
+  `src/lib/api.ts:67, 100` write `LatLng` into JSON-typed
+  Prisma columns (`User.location`, `Report.geometry`). TS
+  can't narrow our concrete `{lat, lng}` shape into Prisma's
+  recursive `InputJsonValue` union, so the call sites now
+  cast via `as Prisma.InputJsonValue` (and `as unknown as`
+  where TS demands it). Prisma still validates the JSON
+  shape on write — the cast is purely a compiler hint.

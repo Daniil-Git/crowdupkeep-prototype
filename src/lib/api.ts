@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "./prisma";
 import {
   bboxFromCenter,
@@ -64,7 +64,11 @@ export async function createUser(input: CreateUserInput, opts?: ApiOptions) {
       email: input.email,
       xp: input.xp ?? 0,
       streak: input.streak ?? 0,
-      location: input.location ?? undefined,
+      // LatLng is a plain {lat,lng} object — JSON-serialisable —
+      // but Prisma's InputJsonValue is a recursive union that TS
+      // can't narrow our object into automatically. The cast is
+      // type-only; Prisma still validates the JSON shape at write.
+      location: (input.location ?? undefined) as Prisma.InputJsonValue | undefined,
     },
   });
 }
@@ -93,7 +97,11 @@ export async function createReport(input: CreateReportInput, opts?: ApiOptions) 
   return client(opts).report.create({
     data: {
       title: input.title,
-      geometry: input.geometry,
+      // See the LatLng → InputJsonValue rationale on the createUser
+      // call above; the via-unknown double cast is required here
+      // because TS won't directly narrow LatLng into InputJsonValue's
+      // recursive union (the compiler's own diagnostic recommends it).
+      geometry: input.geometry as unknown as Prisma.InputJsonValue,
       difficulty: input.difficulty,
       createdBy: input.createdBy,
       photos: input.photos ?? [],
