@@ -4,8 +4,8 @@ export type UsernameVariant = "lowercase" | "titlecase" | "uppercase";
 
 interface UsernameProps {
   // Author string as stored in the data layer. This is always the
-  // real username (e.g. "wreakage_fixer", "demo_user", "civic_hero")
-  // — never a display alias.
+  // real username (e.g. "wreakage_fixer", "demo_user", "civic_hero"),
+  // never a display alias.
   authorUsername: string;
   // Which casing of the "you" alias to substitute when authorUsername
   // matches the live session username. No effect on other-user
@@ -42,7 +42,7 @@ export function resolveDisplayName(
 // carries the literal "you" as a username. Critical views (Profile,
 // /admin/database, comment threads, solution lists) must render the
 // raw author string directly and must NOT route through this
-// component — the affordance it provides (fast self-scanning) is
+// component, the affordance it provides (fast self-scanning) is
 // orthogonal to the audit property those surfaces need (verifiable
 // identity).
 export function Username({

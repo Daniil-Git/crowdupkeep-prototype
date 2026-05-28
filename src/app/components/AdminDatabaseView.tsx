@@ -1,14 +1,12 @@
-// Admin database view. Gated by:
-//   1. adminVerified === true  (TOTP MFA in the current session)
-//   2. role === "admin"        (account-level role check)
+// Admin database view. Gated by two checks:
+//   1. adminVerified === true (TOTP MFA in the current session)
+//   2. role === "admin"       (account-level role check)
 //
-// Renders the user registry table with ONLY the four anonymized
-// columns: Username, Login Nullifier (hex), Identity Nullifier (hex),
-// Role. The projection from UiUser → AnonymizedRegistryRow is the
-// single point of truth for what's allowed to leave the data layer;
-// PII fields (email, xp, streak, avatar, location) are dropped at
-// the projection boundary and are therefore unreachable from this
-// surface.
+// Renders the user registry table using only the anonymized columns
+// emitted by buildAnonymizedRegistry. That projection is the single
+// point of truth for what may leave the data layer; PII fields
+// (email, xp, streak, avatar, location) are dropped at the
+// projection boundary and are not reachable from this surface.
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -29,7 +27,7 @@ import {
 export function AdminDatabaseView() {
   const navigate = useNavigate();
 
-  // Selectors — kept narrow so the component only re-renders when a
+  // Selectors, kept narrow so the component only re-renders when a
   // relevant slice changes.
   const users = useAppStore((s) => s.users);
   const sessionUsername = useAppStore((s) => s.username);
@@ -54,7 +52,7 @@ export function AdminDatabaseView() {
   // placeholder when no session has been registered yet; once
   // registration sets a session username, that one wins (e.g.
   // "wreakage_fixer"). The literal "you" was removed from the data
-  // layer — the (you) badge here is a display-layer cue layered on
+  // layer, the (you) badge here is a display-layer cue layered on
   // top of the raw username column.
   const effectiveCurrentUsername = sessionUsername ?? "demo_user";
 
@@ -62,7 +60,7 @@ export function AdminDatabaseView() {
   // (happens when the operator promotes themselves and didn't have a
   // secret yet), we surface the secret + URI in a modal so the
   // operator can scan it into their authenticator app immediately.
-  // Until that modal is dismissed, the secret is visible — that is
+  // Until that modal is dismissed, the secret is visible, that is
   // intentional and is the same trust model as TOTP enrolment
   // anywhere else in the app.
   const [totpEnrolmentModal, setTotpEnrolmentModal] = useState<
@@ -107,7 +105,7 @@ export function AdminDatabaseView() {
     );
   }
 
-  // Gate 2: account-level role check. Distinct from TOTP — a citizen
+  // Gate 2: account-level role check. Distinct from TOTP, a citizen
   // with their device enrolled in TOTP still cannot see the registry.
   if (sessionRole !== "admin") {
     return (
@@ -129,7 +127,7 @@ export function AdminDatabaseView() {
     );
   }
 
-  // Past both gates — render the anonymized registry.
+  // Past both gates, render the anonymized registry.
   return (
     <div className="min-h-screen bg-white">
       <div className="bg-purple-700 text-white px-4 py-3 flex items-center gap-3">
@@ -286,7 +284,7 @@ export function AdminDatabaseView() {
       </div>
 
       {/*
-        TOTP enrolment modal — shown when promoting yourself triggers a
+        TOTP enrolment modal, shown when promoting yourself triggers a
         fresh secret generation. The operator scans the URI (or types
         the base32 secret) into their authenticator app, then dismisses
         the modal and proceeds to the AdminTotpVerify gate as normal.
@@ -366,7 +364,7 @@ export function AdminDatabaseView() {
 //
 // Defensive against undefined/null inputs: the UiUser type marks
 // these hex fields as required strings, but persisted users[]
-// records from a pre-v7 schema can rehydrate without them — the
+// records from a pre-v7 schema can rehydrate without them, the
 // v4→v6 migrations only patch the identity slice and leave the
 // users[] array as-stored. Returning a placeholder instead of
 // crashing keeps the rest of the table readable in that case.

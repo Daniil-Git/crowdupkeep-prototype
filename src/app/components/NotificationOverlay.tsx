@@ -40,7 +40,7 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
   // Memoised so a re-render that doesn't change inputs (e.g. dialog
   // open/close) doesn't keep recomputing the haversine sort.
   const picked = useMemo(() => {
-    // Drop authors who've been banned from the moderation surface — they
+    // Drop authors who've been banned from the moderation surface, they
     // shouldn't get free promotion via the Nearby prompt either.
     const visible = reports.filter(
       (r) => !bannedUsernames.includes(r.createdByName),
@@ -52,7 +52,7 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
   const distanceKm = picked && "distanceKm" in picked ? picked.distanceKm : null;
 
   // If the candidate set is empty for the active district, the popup must
-  // not render its default copy — the user explicitly asked us not to lie
+  // not render its default copy, the user explicitly asked us not to lie
   // about "nearby civic issues" when none exist. We also push the parent's
   // `open` state back to false so its trigger state stays in sync (e.g.
   // after a district change drains the visible set mid-display).
@@ -74,7 +74,7 @@ export function NotificationOverlay({ open, onOpenChange }: NotificationOverlayP
 
   // View Issue is enabled whenever the popup is showing. Reward
   // availability is a property of the *catalogue*, not of the report
-  // itself — the underlying issue is still viewable (and solvable for
+  // itself, the underlying issue is still viewable (and solvable for
   // XP) even when there is no redeemable voucher behind it. The early
   // `if (!nearby) return null` above is the actual viewability gate:
   // if the report couldn't be opened, the popup wouldn't be on screen

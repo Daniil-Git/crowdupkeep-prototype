@@ -57,7 +57,7 @@ describe("useAppStore", () => {
       photo: null,
     });
     // The new pin's address must be matchable by the same regexes the
-    // citizen and admin filters use — otherwise a citizen filing under
+    // citizen and admin filters use, otherwise a citizen filing under
     // "Old Port" wouldn't see their own report when the filter is on.
     expect(addressToDistrict(created.address)).toBe("Old Port");
     // Geometry should land in the Old Port anchor zone, not at the
@@ -78,7 +78,7 @@ describe("useAppStore", () => {
 
   it("acceptSolution awards difficulty * 50 XP and flips report to solved", () => {
     const state = useAppStore.getState();
-    // Use the seeded report 3 (in-progress, difficulty 4) — add a solution first.
+    // Use the seeded report 3 (in-progress, difficulty 4), add a solution first.
     const reportId = state.reports.find((r) => r.id === 3)!.id;
     state.addSolution({ reportId, description: "Fixed", proofPhoto: null });
 
@@ -150,7 +150,7 @@ describe("useAppStore", () => {
   it("includes selectedDistrict in the persisted partition", () => {
     // The partialize config decides what survives a refresh. Without the
     // district being persisted, the user would lose their filter on every
-    // reload — exactly the regression we just fixed.
+    // reload, exactly the regression we just fixed.
     useAppStore.getState().setSelectedDistrict("Dasoudi");
     const persistOptions = (useAppStore.persist as unknown as {
       getOptions: () => { partialize?: (s: unknown) => Record<string, unknown> };
@@ -212,7 +212,7 @@ describe("getRewardStatusForReport", () => {
   it("uses the linked reward's stock alone when a report has a rewardId, ignoring global inventory", () => {
     // Seed report id 1 is linked to reward id 5 (Pizza Hut, stock: 0).
     // Other rewards (Cyta / IKEA / etc.) hold plenty of stock, but
-    // that should not bleed through — a per-report link is meant to
+    // that should not bleed through, a per-report link is meant to
     // pin the popup to that specific reward's availability.
     const status = useAppStore.getState().getRewardStatusForReport(1);
     expect(status).not.toBeNull();
@@ -234,7 +234,7 @@ describe("getRewardStatusForReport", () => {
   it("falls back to global stock when the linked rewardId points at a missing reward (stale link)", () => {
     // Simulate a half-broken state: a report holds a stale rewardId
     // that no longer exists in the catalogue. The popup should not
-    // crash — it should degrade to the global-inventory rule so the
+    // crash, it should degrade to the global-inventory rule so the
     // user still sees a sensible state.
     useAppStore.setState((s) => ({
       reports: s.reports.map((r) =>
@@ -322,7 +322,7 @@ describe("proximityRewardLabel", () => {
 describe("pickNearbyReport (lib/nearby)", () => {
   it("returns the closest pending report to the user", () => {
     const here = { lat: 34.7071, lng: 33.0226 };
-    // Reuse the seed reports — they're guaranteed to include several
+    // Reuse the seed reports, they're guaranteed to include several
     // pending Limassol-area issues.
     const reports = useAppStore.getState().reports;
     const picked = pickNearbyReport(reports, here);
@@ -383,7 +383,7 @@ describe("seed catalogue (v4 invariants)", () => {
     expect(last.id).toBe(5);
     expect(last.title).toBe("Pizza Hut €20 Voucher");
     expect(last.stock).toBe(0);
-    // Image URL must not duplicate any other entry — verifying it in
+    // Image URL must not duplicate any other entry, verifying it in
     // the seed prevents an easy copy-paste regression where two
     // rewards share the same Unsplash photo.
     const otherUrls = rewards.slice(0, -1).map((r) => r.imageUrl);
@@ -427,7 +427,7 @@ describe("seed catalogue (v4 invariants)", () => {
   });
 });
 
-describe("persist migrate (v9 — re-upload audit slot; no destructive payload)", () => {
+describe("persist migrate (v9, re-upload audit slot; no destructive payload)", () => {
   // The migrate function is the only way persisted snapshots from
   // earlier devConsole / catalogue shapes get cleaned up on a real
   // user's browser. Exercising it directly is the cheap way to keep
@@ -444,7 +444,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     expect(seed.selectedDistrict).toBe(ALL_LOCATIONS);
     expect(seed.reports.length).toBeGreaterThan(0);
     expect(seed.rewards.length).toBeGreaterThan(0);
-    // Identity slice defaults — newly added in v5, extended in v7 & v9.
+    // Identity slice defaults, newly added in v5, extended in v7 & v9.
     expect(seed.username).toBeNull();
     expect(seed.identityNullifier).toBeNull();
     expect(seed.previousIdentityNullifier).toBeNull();
@@ -456,7 +456,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
   });
 
   it("fromVersion < 4 triggers a full reseed (old shape, nothing precious)", () => {
-    // Simulate a v1 client with a wildly diverged snapshot — drained
+    // Simulate a v1 client with a wildly diverged snapshot, drained
     // users, no rewards, banned everyone, parked on a weird district.
     const stale = {
       currentUserId: 999,
@@ -529,7 +529,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
       redeemedVouchers: [],
       bannedUsernames: [],
       selectedDistrict: ALL_LOCATIONS,
-      // Stale identity slots from v5 — must not survive.
+      // Stale identity slots from v5, must not survive.
       username: "alice",
       identityNullifier: "deadbeef".repeat(8),
       loginNullifier: "cafebabe".repeat(8),
@@ -541,7 +541,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     // Catalogue stuff preserved as-is.
     expect(migrated.currentUserId).toBe(7);
     expect(migrated.selectedDistrict).toBe(ALL_LOCATIONS);
-    // Every identity slot is back to its initial null/false default —
+    // Every identity slot is back to its initial null/false default;
     // there is no path for an old loginNullifier to bypass the
     // password check in the v6 login flow.
     expect(migrated.username).toBeNull();
@@ -562,7 +562,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     // currentUserId is overlaid in place with that identity, so the
     // admin registry view stops showing both "demo_user" and the
     // registered name as separate rows. The credential triple is
-    // preserved byte-for-byte — this is a data-layer realignment,
+    // preserved byte-for-byte, this is a data-layer realignment,
     // not a credential rotation.
     const v7Snapshot = {
       currentUserId: 7,
@@ -591,7 +591,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     // The literal "you" is gone from both surfaces.
     expect(migrated.users.find((u) => u.username === "you")).toBeUndefined();
     expect(migrated.reports.find((r) => r.createdByName === "you")).toBeUndefined();
-    // No "demo_user" residue either — the slot was overlaid with
+    // No "demo_user" residue either, the slot was overlaid with
     // the registered identity rather than left at the placeholder.
     expect(migrated.users.find((u) => u.username === "demo_user")).toBeUndefined();
     // The id=7 row IS the registered user, with the real PBKDF2
@@ -618,7 +618,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
   it("v7 → v8 leaves the placeholder slot as 'demo_user' when the identity slice is empty (no registration yet)", () => {
     // When the persisted state has no registered user, there is
     // nothing to overlay. The scrub of the literal "you" still
-    // runs and the slot is renamed to "demo_user" — which is the
+    // runs and the slot is renamed to "demo_user", which is the
     // visible placeholder for the never-registered demo.
     const v7Snapshot = {
       currentUserId: 7,
@@ -649,7 +649,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
   it("v7 → v8 adopts the existing slot when the registered name matches a seed user (no double-row)", () => {
     // If the registered username collides with an existing seed
     // user (e.g. someone registered as "civic_hero"), we should
-    // NOT overlay the placeholder at id=7 — that would create two
+    // NOT overlay the placeholder at id=7, that would create two
     // rows with the same username. Instead, currentUserId moves to
     // the matching id and the seed's nullifier hex columns are
     // overlaid with the real PBKDF2 outputs.
@@ -676,7 +676,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     const migrated = migrateState(v7Snapshot, 7);
     // currentUserId moved to the matching seed row.
     expect(migrated.currentUserId).toBe(1);
-    // No double-row — only one entry per username.
+    // No double-row, only one entry per username.
     const civicHeroRows = migrated.users.filter((u) => u.username === "civic_hero");
     expect(civicHeroRows.length).toBe(1);
     // The matched row carries the real nullifier hex now.
@@ -690,7 +690,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     // v9 introduces two optional slots: identity-slice
     // `previousIdentityNullifier` and per-row
     // `previousIdentityNullifierHex`. A v8 snapshot has neither, but
-    // both are nullable/optional — so the migration must NOT clobber
+    // both are nullable/optional, so the migration must NOT clobber
     // any existing state, just thread the snapshot through unchanged.
     const v8Snapshot = {
       currentUserId: 7,
@@ -725,7 +725,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
     expect(migrated.loginNullifier).toBe("ee".repeat(32));
     expect(migrated.ownershipPublicKey).toBe('{"kty":"OKP"}');
     expect(migrated.isAuthenticated).toBe(true);
-    // The new slot is undefined OR null on the migrated snapshot — both
+    // The new slot is undefined OR null on the migrated snapshot, both
     // are acceptable; the runtime treats them identically. We assert
     // the falsy interpretation so a future migration that initialises
     // to null doesn't fail this test, and the optional column on the
@@ -737,7 +737,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
   it("v6 → v7 INVALIDATES a stored loginNullifier with no matching ownership key (forces re-register)", () => {
     // v6 had a password-derived loginNullifier but NO ownership keypair.
     // A v6 user dragging that snapshot into a v7 client would have the
-    // nullifier alone — which under v7 is no longer sufficient to
+    // nullifier alone, which under v7 is no longer sufficient to
     // authenticate, because the login flow now requires a signature
     // verified against an ownership public key the v6 snapshot never
     // generated. Wipe and force re-register.
@@ -754,7 +754,7 @@ describe("persist migrate (v9 — re-upload audit slot; no destructive payload)"
       loginNullifier: "cafebabe".repeat(8),
       isAuthenticated: true,
       role: "citizen",
-      // No ownershipPublicKey — v6 didn't have it.
+      // No ownershipPublicKey, v6 didn't have it.
       totpSecret: null,
       adminVerified: false,
     };

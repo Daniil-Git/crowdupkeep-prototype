@@ -7,7 +7,7 @@ import { useAppStore } from "./store/appStore";
 export default function App() {
   // The persist middleware rehydrates asynchronously on mount. Until that
   // settles, screens like Profile/Dashboard could mount with the seed data
-  // and then snap to the persisted values mid-render — visible flicker on
+  // and then snap to the persisted values mid-render, visible flicker on
   // refresh. We block the route tree on a single hydration tick instead.
   const [hydrated, setHydrated] = useState(() =>
     useAppStore.persist.hasHydrated(),

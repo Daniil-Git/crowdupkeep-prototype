@@ -21,7 +21,7 @@ describe("deriveIdentityNullifier", () => {
     expect(n).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("is deterministic — same citizen ID ⇒ same nullifier", async () => {
+  it("is deterministic, same citizen ID ⇒ same nullifier", async () => {
     const a = await deriveIdentityNullifier("1234567890");
     const b = await deriveIdentityNullifier("1234567890");
     expect(a).toBe(b);
@@ -34,13 +34,13 @@ describe("deriveIdentityNullifier", () => {
   });
 });
 
-describe("deriveLoginNullifier — password+username binding", () => {
+describe("deriveLoginNullifier, password+username binding", () => {
   it("returns a 64-char hex string for any valid password/username pair", async () => {
     const n = await deriveLoginNullifier("hunter2", "alice");
     expect(n).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("is deterministic — same (password, username) ⇒ same nullifier", async () => {
+  it("is deterministic, same (password, username) ⇒ same nullifier", async () => {
     const a = await deriveLoginNullifier("hunter2", "alice");
     const b = await deriveLoginNullifier("hunter2", "alice");
     expect(a).toBe(b);
@@ -49,7 +49,7 @@ describe("deriveLoginNullifier — password+username binding", () => {
   it("USERNAME-BOUND: same password under a different username ⇒ different nullifier", async () => {
     // This is the contract that makes per-user PBKDF2 work without a
     // server-stored random salt. If this ever fails, two users with the
-    // same password share a login credential — a catastrophic regression.
+    // same password share a login credential, a catastrophic regression.
     const aliceN = await deriveLoginNullifier("hunter2", "alice");
     const bobN = await deriveLoginNullifier("hunter2", "bob");
     expect(aliceN).not.toBe(bobN);
@@ -64,7 +64,7 @@ describe("deriveLoginNullifier — password+username binding", () => {
   it("is domain-separated from the identity nullifier (different inputs AND different salts)", async () => {
     // Even if a user somehow chose their citizen ID as their password
     // (and "alice" happened to be the username), the two derivations
-    // produce different values — the salt domain separation
+    // produce different values, the salt domain separation
     // ("crowdupkeep:v1:identity" vs "crowdupkeep:v2:login:alice")
     // guarantees it.
     const id = await deriveIdentityNullifier("1234567890");
@@ -76,7 +76,7 @@ describe("deriveLoginNullifier — password+username binding", () => {
     // Implementation note: PBKDF2 itself accepts zero-length input. The
     // slice/UI is the layer that rejects empty passwords before calling
     // this function. We assert here that the lib stays consistent on
-    // an edge input rather than throwing — defensive behaviour.
+    // an edge input rather than throwing, defensive behaviour.
     const n = await deriveLoginNullifier("", "alice");
     expect(n).toMatch(/^[0-9a-f]{64}$/);
   });

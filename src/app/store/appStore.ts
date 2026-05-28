@@ -54,7 +54,7 @@ export interface UiReport {
   solutions: ReportSolution[];
   // Optional link to a specific reward in the catalogue. When set, the
   // proximity popup's "available" check uses that reward's stock alone
-  // instead of the global inventory total — so a report tied to a 0-stock
+  // instead of the global inventory total, so a report tied to a 0-stock
   // voucher deterministically renders the "XP challenge" copy regardless
   // of how much stock the rest of the catalogue holds.
   rewardId?: number;
@@ -77,7 +77,7 @@ export interface UiUser {
   identityNullifierHex: string;
   loginNullifierHex: string;
   // Most recent prior identityNullifierHex from before the latest
-  // re-upload. Optional — present only on rows whose owner has gone
+  // re-upload. Optional, present only on rows whose owner has gone
   // through reuploadIdentity at least once. Display-only audit slot;
   // does NOT gate authentication.
   previousIdentityNullifierHex?: string | null;
@@ -109,7 +109,7 @@ export interface AppState extends IdentitySlice {
   redeemedVouchers: RedeemedVoucher[];
   bannedUsernames: string[];
 
-  // global UI filter — the "Current Area" dropdown. Persisted so a
+  // global UI filter, the "Current Area" dropdown. Persisted so a
   // returning user keeps their last context.
   selectedDistrict: LocationFilter;
   setSelectedDistrict: (filter: LocationFilter) => void;
@@ -124,7 +124,7 @@ export interface AppState extends IdentitySlice {
     description: string;
     difficulty: number;
     // Either supply explicit geometry/address (admin/test path) or a
-    // district — citizens filing from the dashboard go via district so the
+    // district, citizens filing from the dashboard go via district so the
     // pin lands in the area they're already filtering by.
     geometry?: LatLng;
     address?: string;
@@ -153,7 +153,7 @@ export interface AppState extends IdentitySlice {
   // Returns the credits + availability metadata the Nearby popup renders
   // for a given report. xpCost is the XP earned by solving the report
   // (xpFor(difficulty)). `available` is true when the report is still
-  // solvable AND there is some redeemable reward inventory left — the
+  // solvable AND there is some redeemable reward inventory left, the
   // combination the proximity prompt is trying to pitch.
   getRewardStatusForReport: (
     reportId: number | string,
@@ -374,11 +374,11 @@ const stateCreator: StateCreator<AppState> = (set, get, store) => ({
     if (!report) return null;
     // Stock the popup pitches against. Two-tier rule:
     //   1. If the report has an explicit `rewardId`, use that single
-    //      reward's stock — a report tied to the 0-stock Pizza Hut
+    //      reward's stock, a report tied to the 0-stock Pizza Hut
     //      voucher should render "XP challenge" even when the rest of
     //      the catalogue is fully stocked.
     //   2. Otherwise fall back to total redeemable inventory across
-    //      all rewards — the old global-catalogue rule.
+    //      all rewards, the old global-catalogue rule.
     // A linked rewardId that no longer matches any reward (stale data)
     // falls through to the global total so the popup degrades to the
     // unlinked behaviour instead of crashing.
@@ -462,7 +462,7 @@ export function freshSeedState(): Pick<
 //     existing snapshot. Catalogue / reports / redemptions / bans
 //     survive untouched; auth slots come up null so the user
 //     re-registers with the new password-derived loginNullifier.
-//   - From version <7: the ownership proof was added — pre-v7
+//   - From version <7: the ownership proof was added, pre-v7
 //     snapshots have no `ownershipPublicKey`, so a stored
 //     loginNullifier alone is no longer sufficient to authenticate.
 //     Wipe the identity slice so the user re-registers and gets a
@@ -489,7 +489,7 @@ export function migrateState(
     // Second, if the persisted identity slice already carries a
     // registered username (i.e. the user registered under a pre-v8
     // build and we want their credentials to keep working), overlay
-    // users[currentUserId] with that identity — the same retroactive
+    // users[currentUserId] with that identity, the same retroactive
     // sync the refactored register() action performs on a fresh
     // install. The credential triple in the identity slice
     // (username, loginNullifier, ownershipPublicKey) is preserved
@@ -520,7 +520,7 @@ export function migrateState(
     if (session && identity.currentUserId != null) {
       const collision = nextUsers.find((u) => u.username === session);
       if (collision) {
-        // Registered name matches an existing user — adopt that slot
+        // Registered name matches an existing user, adopt that slot
         // and overlay just the nullifier hex columns. currentUserId
         // moves to the matching id; the previous placeholder row is
         // left alone.
@@ -542,7 +542,7 @@ export function migrateState(
           reports: nextReports,
         } as AppState;
       } else {
-        // No collision — overlay the slot at currentUserId in place.
+        // No collision, overlay the slot at currentUserId in place.
         const slot = nextUsers.find((u) => u.id === identity.currentUserId);
         if (slot) {
           const prevName = slot.username;
@@ -583,7 +583,7 @@ export function migrateState(
   // v9 introduces previousIdentityNullifier (slice) and the optional
   // previousIdentityNullifierHex column on each users[] row. Both are
   // null/undefined for snapshots predating their first re-upload, so
-  // there is no destructive migration to run — the v<7 branch above
+  // there is no destructive migration to run, the v<7 branch above
   // already spreads identityInitialState (which now carries
   // previousIdentityNullifier: null), and the column on UiUser is
   // optional so old rows hydrate cleanly without it. Branch left
@@ -611,21 +611,21 @@ export const useAppStore = create<AppState>()(
       redeemedVouchers: state.redeemedVouchers,
       bannedUsernames: state.bannedUsernames,
       selectedDistrict: state.selectedDistrict,
-      // Identity slice — derived values only, no PII. Persisting these
+      // Identity slice, derived values only, no PII. Persisting these
       // is what enables "no re-entry of the national ID on the same
       // device". The nullifiers are one-way PBKDF2 outputs.
       username: state.username,
       identityNullifier: state.identityNullifier,
       // Most-recent prior identity nullifier from before the latest
       // reuploadIdentity rotation. Persist so the rotation survives a
-      // reload — without this, a refresh after a re-upload would
+      // reload, without this, a refresh after a re-upload would
       // forget the previous binding.
       previousIdentityNullifier: state.previousIdentityNullifier,
       loginNullifier: state.loginNullifier,
       isAuthenticated: state.isAuthenticated,
       role: state.role,
       // Public half of the Ed25519 ownership keypair. The private half
-      // is never persisted — re-derived from typed credentials on each
+      // is never persisted, re-derived from typed credentials on each
       // login attempt. JWK-shaped JSON string for stable round-tripping
       // through the persist layer.
       ownershipPublicKey: state.ownershipPublicKey,

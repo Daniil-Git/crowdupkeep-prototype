@@ -9,7 +9,7 @@ import { useAppStore } from "../store/appStore";
 
 // Login is strictly username + password.
 //
-// The citizen ID is NEVER requested here — it's only used at
+// The citizen ID is NEVER requested here, it's only used at
 // registration to derive the long-lived identityNullifier. The
 // loginNullifier is PBKDF2(password, salt + username), so the only
 // way to reproduce the credential is to know BOTH fields. There is
@@ -44,13 +44,13 @@ export function Login() {
         navigate("/dashboard");
         return;
       }
-      // Identical message for "wrong password" and "unknown user" —
+      // Identical message for "wrong password" and "unknown user":
       // never disclose which one failed to a caller who might be
       // probing for valid usernames.
       toast.error("Invalid credentials.");
     } finally {
       setSubmitting(false);
-      // Wipe the typed password from the form on every attempt — a
+      // Wipe the typed password from the form on every attempt, a
       // rejected value should not sit in the input waiting for the
       // user to retry by editing one character.
       setPassword("");

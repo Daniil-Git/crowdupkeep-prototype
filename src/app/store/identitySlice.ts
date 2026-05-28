@@ -1,20 +1,19 @@
-// Zustand slice for citizen-ID-derived auth + admin MFA enrolment.
+// Zustand slice for citizen-ID-derived auth and admin MFA enrolment.
 //
 // Persistence policy:
-//   - identityNullifier, loginNullifier, username, isAuthenticated:
-//     persisted to localStorage. Returning users on the same device
-//     log in without re-entering their citizen ID (the cached
-//     loginNullifier IS the bearer credential on this device).
-//   - totpSecret: persisted for the thesis-prototype demo only. In a
-//     real product the secret lives on the server (or in a hardware
-//     authenticator) — the client only sends back the 6-digit code
-//     being verified.
+//   - identityNullifier, loginNullifier, username, isAuthenticated
+//     are persisted to localStorage. Returning users on the same
+//     device log in without re-entering their citizen ID; the cached
+//     loginNullifier is the bearer credential on this device.
+//   - totpSecret is persisted for the prototype demo only. In a real
+//     product the secret would live on the server (or in a hardware
+//     authenticator) and the client would only send the 6-digit code.
 //
-// Nothing in this slice ever holds a raw citizen ID. The `register`
-// and `login` actions accept a `rawCitizenId` only as an input
-// argument; canonicalisation + PBKDF2 happen inside, and only the
-// derived nullifiers are passed to `set(...)`. The raw value falls out
-// of scope as soon as the action returns.
+// The slice never holds a raw citizen ID. The register and login
+// actions accept rawCitizenId only as an input argument;
+// canonicalisation and PBKDF2 happen inside, and only the derived
+// nullifiers reach set(...). The raw value falls out of scope as
+// soon as the action returns.
 
 import type { StateCreator } from "zustand";
 import { canonicalizeOrThrow } from "@/lib/cypriotId";
@@ -30,43 +29,43 @@ import {
   verifySignature,
 } from "@/lib/ownership";
 import { generateSecret, provisioningUri, verifyTotp } from "@/lib/totp";
-// Type-only — no runtime cycle. The identity slice is composed INTO
-// the outer AppState in appStore.ts; at runtime the set/get passed
-// in are wide enough to touch users[]/reports[]/currentUserId, but
-// the StateCreator<IdentitySlice> typing narrows them to identity
+// Type-only imports (no runtime cycle). The identity slice is
+// composed into AppState in appStore.ts; at runtime the set/get
+// passed in are wide enough to touch users[]/reports[]/currentUserId,
+// but the StateCreator<IdentitySlice> typing narrows them to identity
 // fields only. The mixin below declares the outer-access contract
-// statically so the register-time sync + the promote/demote actions
+// statically so the register-time sync and the promote/demote actions
 // can read those fields without per-call casts.
 import type { UiReport, UiUser } from "./appStore";
 
 export interface IdentityState {
   username: string | null;
   identityNullifier: string | null;
-  // The most recent prior identityNullifier (before the latest
-  // re-upload). On every successful re-upload of a *different* citizen
-  // ID, the slot rotates: current → previous, new → current. This is
-  // an audit/history slot — it does NOT gate authentication (login
-  // remains password + Ed25519 signature only).
+  // Most recent prior identityNullifier, set on each re-upload of a
+  // different citizen ID (current rotates to previous, new value goes
+  // to current). Audit slot only; does not gate authentication, since
+  // login still depends on password + Ed25519 signature.
   previousIdentityNullifier: string | null;
   loginNullifier: string | null;
   isAuthenticated: boolean;
 
-  // Role of the registered account. `null` until registration. Defaults
+  // Role of the registered account. null until registration; defaults
   // to "citizen" at register-time. Promotion to "admin" is an explicit
-  // store action (`setRole`) — prototype-mode admin promotion lives in
-  // the dev console; production would expose this only to a
-  // backoffice surface holding its own auth gate.
+  // store action (setRole). In the prototype this lives in the dev
+  // console; a production build would expose it only behind a
+  // back-office surface with its own auth gate.
   role: "admin" | "citizen" | null;
 
   // Public half of the deterministic Ed25519 keypair derived from
-  // (password, username) at registration time. Stored as JWK-shaped
-  // JSON so it survives the persist middleware without bespoke
+  // (password, username) at registration. Stored as JWK-shaped JSON
+  // so it survives the persist middleware without bespoke
   // serialisation. Used at login to verify the client's signature of
-  // the server-issued challenge nonce — proving knowledge of the
-  // password WITHOUT the server ever seeing the password.
+  // the server-issued challenge nonce, proving knowledge of the
+  // password without the server ever seeing it.
+  //
   // The private half is never persisted: it is re-derived from the
-  // typed credentials on each login attempt and falls out of scope as
-  // soon as the action returns.
+  // typed credentials on each login attempt and falls out of scope
+  // as soon as the action returns.
   ownershipPublicKey: string | null;
 
   // Admin MFA state.
@@ -81,9 +80,9 @@ export interface IdentityActions {
     rawCitizenId: string;
   }) => Promise<{ identityNullifier: string; loginNullifier: string }>;
 
-  // Login takes ONLY username + password. The citizen ID is never
-  // requested at login time — it was only needed once at registration
-  // to derive the (separate) identityNullifier.
+  // Login takes only username + password. The citizen ID is never
+  // requested at login: it is needed once at registration to derive
+  // the (separate) identityNullifier and not again.
   login: (params: {
     username: string;
     password: string;
@@ -91,12 +90,12 @@ export interface IdentityActions {
 
   // Re-upload of the citizen ID after registration. Derives a fresh
   // identity nullifier from the new ID and rotates the two slots:
-  //   previousIdentityNullifier ← current identityNullifier
-  //   identityNullifier         ← PBKDF2(newCanonical, identity-salt)
-  // If the new ID canonicalises to the SAME nullifier as the current
-  // one, the call is a no-op (previous slot is NOT clobbered with a
-  // duplicate of current). The login credential triple is deliberately
-  // untouched — this rebinds the identity column only.
+  //   previousIdentityNullifier <- current identityNullifier
+  //   identityNullifier         <- PBKDF2(newCanonical, identity-salt)
+  // If the new ID canonicalises to the same nullifier as the current
+  // one, the call is a no-op (the previous slot is not clobbered with
+  // a duplicate of current). Login credentials are not touched; this
+  // rebinds the identity column only.
   reuploadIdentity: (params: {
     rawCitizenId: string;
   }) => Promise<{
@@ -105,27 +104,27 @@ export interface IdentityActions {
     previousIdentityNullifier: string | null;
   }>;
 
-  // Session-only logout. Clears the access flags
-  // (isAuthenticated, role, adminVerified) so any role-gated view
-  // re-locks immediately, but DELIBERATELY preserves the credential
-  // triple (username, loginNullifier, ownershipPublicKey) on disk so
-  // a returning user can re-authenticate with username + password
-  // without re-running the citizen-ID registration flow.
+  // Session-only logout. Clears the access flags (isAuthenticated,
+  // role, adminVerified) so any role-gated view re-locks immediately,
+  // but preserves the credential triple (username, loginNullifier,
+  // ownershipPublicKey) on disk so a returning user can re-authenticate
+  // with username + password without re-running the citizen-ID flow.
+  //
   // Trade-off: an attacker with localStorage access can still read
-  // the persisted nullifier and public key after logout — those
-  // alone are not sufficient to authenticate (the login path still
-  // requires a fresh signature derived from the password), but the
-  // earlier "wipe everything on logout" property is intentionally
-  // dropped here for demo-ergonomics.
+  // the persisted nullifier and public key after logout. Those alone
+  // are not sufficient to authenticate (the login path still requires
+  // a fresh signature derived from the password), but the earlier
+  // "wipe everything on logout" property is dropped here in favour of
+  // demo ergonomics.
   logout: () => void;
 
-  // Role promotion / demotion. `setRole` is the low-level escape
-  // hatch (dev-console only); `promoteToAdmin` is the
-  // properly-gated production-shaped action — caller is authn'd,
-  // target exists in the registry, mock API simulates the
-  // server-side authz/audit boundary, and the live session's TOTP
-  // secret is provisioned if missing so the secondary gate is
-  // reachable without an extra enrolment trip.
+  // Role promotion / demotion. setRole is the low-level escape hatch
+  // (dev-console only). promoteToAdmin is the gated production-shaped
+  // action: the caller must be authenticated, the target must exist
+  // in the registry, the mock API stands in for the server-side
+  // authz/audit boundary, and the live session's TOTP secret is
+  // provisioned if missing so the secondary gate is reachable without
+  // an extra enrolment step.
   setRole: (role: "admin" | "citizen") => void;
   promoteToAdmin: (username: string) => Promise<{
     promoted: string;
@@ -137,7 +136,7 @@ export interface IdentityActions {
   // session user, the identity slice is also updated (role +
   // adminVerified) so the admin views re-lock immediately on the
   // next render pass without waiting for a reload. TOTP secret is
-  // deliberately NOT touched — re-promotion should be able to reuse
+  // deliberately NOT touched, re-promotion should be able to reuse
   // the existing enrolled authenticator.
   demoteFromAdmin: (username: string) => Promise<{
     demoted: string;
@@ -212,10 +211,10 @@ async function mockAdminDemoteApi(
 
 // Mock secure API for the login pre-flight. Stand-in for
 //   GET /api/auth/challenge?username=...
-// The server returns a fresh nonce REGARDLESS of whether the username
-// exists — that's the anti-enumeration property. A caller probing
-// "does <name> exist?" cannot tell from the response shape, size, or
-// (modulo the simulated latency inside generateAuthChallenge) timing.
+// The server returns a fresh nonce whether or not the username
+// exists; that's the anti-enumeration property. A caller probing
+// "does <name> exist?" cannot tell from the response shape, size,
+// or (modulo the simulated latency in generateAuthChallenge) timing.
 async function mockAuthChallengeApi(
   _username: string,
 ): Promise<{ challengeId: string; nonce: string }> {
@@ -227,9 +226,9 @@ async function mockAuthChallengeApi(
 // The "server" here is the local persisted store: it holds the
 // (username, loginNullifier, ownershipPublicKey) tuple from
 // registration. The signature is verified against that public key.
-// Returns true on a verified match, false otherwise — the caller never
-// sees which specific check failed, mirroring the anti-enumeration
-// contract on the toast error in the Login component.
+// Returns true on a verified match, false otherwise. The caller is
+// never told which specific check failed, mirroring the
+// anti-enumeration contract on the Login component's toast.
 async function mockAuthLoginApi(params: {
   submittedUsername: string;
   submittedLoginNullifier: string;
@@ -255,7 +254,7 @@ async function mockAuthLoginApi(params: {
 
   // The ownership public key is the new gate. Without it, knowledge of
   // the nullifier alone (e.g. a stolen localStorage dump) cannot
-  // authenticate — the caller must also be able to produce a fresh
+  // authenticate, the caller must also be able to produce a fresh
   // Ed25519 signature over the challenge, which requires re-deriving
   // the private key from (password, username).
   if (!storedOwnershipPublicKeyJwkJson) return false;
@@ -285,7 +284,7 @@ export const createIdentitySlice: StateCreator<
     // canonicalizeOrThrow surfaces CypriotIdFormatError to the caller
     // so the UI can render a precise message. We never derive on
     // anything that doesn't pass the 10-digit format check.
-    // Refuse empty/whitespace passwords — same shape as the citizen ID
+    // Refuse empty/whitespace passwords, same shape as the citizen ID
     // check: derivation is mandatory and only fires on valid input.
     if (typeof password !== "string" || password.trim().length === 0) {
       throw new Error("Password is required for registration.");
@@ -295,7 +294,7 @@ export const createIdentitySlice: StateCreator<
     }
     const canonical = canonicalizeOrThrow(rawCitizenId);
     // Run the nullifier derivations and the ownership keypair
-    // derivation in parallel — they share no state and both block on
+    // derivation in parallel, they share no state and both block on
     // PBKDF2 inside WebCrypto, which is the slowest step.
     const [{ identityNullifier, loginNullifier }, ownership] = await Promise.all([
       deriveNullifiers({
@@ -321,21 +320,21 @@ export const createIdentitySlice: StateCreator<
     });
 
     // Sync the gamification users[] table to the new identity so the
-    // admin registry view, the "My Reports" list, and getCurrentUser()
-    // all surface the same name instead of the pre-register
-    // placeholder. Two cases:
-    //   (a) The registered username matches an existing seed row —
-    //       adopt that slot. currentUserId moves to the matching id;
-    //       the slot's nullifier hex columns are overlaid with the
-    //       real PBKDF2 outputs. The placeholder row at the old
-    //       currentUserId is left alone.
-    //   (b) The registered username does NOT match any seed row —
-    //       overlay the slot at currentUserId in place. The
-    //       placeholder username, email, nullifier hex, and role are
-    //       all replaced with the registered values; reports whose
-    //       createdByName was the placeholder are retro-fitted to
-    //       the new username so the citizen's "My Reports" list
-    //       shows their seeded reports as their own.
+    // admin registry view, the "My Reports" list, and getCurrentUser
+    // all surface the same name instead of the placeholder. Two cases:
+    //
+    //   (a) The registered username matches an existing seed row:
+    //       adopt that slot. currentUserId moves to the matching id
+    //       and the slot's nullifier hex columns get the real PBKDF2
+    //       outputs. The placeholder row at the old currentUserId is
+    //       left untouched.
+    //
+    //   (b) The registered username does not match any seed row:
+    //       overlay the slot at currentUserId in place. The placeholder
+    //       username, email, nullifier hex, and role are replaced with
+    //       the registered values, and reports authored under the
+    //       placeholder name are retro-fitted to the new username so
+    //       the citizen's "My Reports" list shows them as their own.
     set((state) => {
       const existing = state.users.find((u) => u.username === username);
       if (existing) {
@@ -380,7 +379,7 @@ export const createIdentitySlice: StateCreator<
   },
 
   login: async ({ username, password }) => {
-    // Single, strict path. Both fields are required — no implicit
+    // Single, strict path. Both fields are required, no implicit
     // bypass on the username alone (the previous fast-path bug).
     if (
       typeof username !== "string" || username.length === 0 ||
@@ -389,14 +388,14 @@ export const createIdentitySlice: StateCreator<
       return false;
     }
 
-    // Step 1 — pre-flight challenge fetch. Returns a fresh nonce
+    // Step 1, pre-flight challenge fetch. Returns a fresh nonce
     // regardless of whether the username exists. The fetch is fired
     // BEFORE any local-state branching so the on-wire shape and
     // (mock) timing don't differ between known / unknown users:
     // anti-enumeration in the wire protocol.
     const challenge = await mockAuthChallengeApi(username);
 
-    // Step 2 — derive the (login nullifier, ownership keypair) tuple
+    // Step 2, derive the (login nullifier, ownership keypair) tuple
     // from the typed credentials. Both derivations use PBKDF2 with
     // username as part of the salt; doing them in parallel keeps the
     // overall login latency ~ the slower of the two PBKDF2 rounds.
@@ -416,7 +415,7 @@ export const createIdentitySlice: StateCreator<
       return false;
     }
 
-    // Step 3 — submit { username, loginNullifier, challengeId,
+    // Step 3, submit { username, loginNullifier, challengeId,
     // signature } to the mock server. The server compares the
     // submitted nullifier to the stored one (cheap rejection on a
     // wrong password) and verifies the signature against the stored
@@ -440,36 +439,28 @@ export const createIdentitySlice: StateCreator<
   },
 
   logout: () => {
-    // 1. Clear ONLY the session-scoped access flags. The credential
-    //    triple (username, loginNullifier, ownershipPublicKey) and
-    //    derived identity material (identityNullifier, totpSecret)
-    //    are deliberately preserved in the persisted slice so a
-    //    returning user can log in with username + password without
-    //    re-running the citizen-ID registration flow. Trade-off is
-    //    documented on the `logout` interface declaration above —
-    //    this is a demo-ergonomics choice, not a security property.
+    // Clear only the session access flags. The credential triple
+    // (username, loginNullifier, ownershipPublicKey) and the derived
+    // identity material (identityNullifier, totpSecret) stay in the
+    // persisted slice so a returning user can log back in with just
+    // username + password. This is a demo-ergonomics choice, not a
+    // security property; see the logout interface declaration above
+    // for the trade-off.
     set({ isAuthenticated: false, role: null, adminVerified: false });
 
-    // 2. Sweep sessionStorage. We don't intentionally write to it
-    //    anywhere in this app, but third-party libs occasionally do —
-    //    clearing on logout prevents an accidentally-leaked secret
-    //    from outliving the session. Wrapped in try/catch for private
-    //    mode browsers that throw on sessionStorage access.
+    // Sweep sessionStorage in case a third-party lib has written
+    // something there. Wrapped in try/catch for private-mode browsers
+    // that throw on sessionStorage access.
     if (typeof sessionStorage !== "undefined") {
       try { sessionStorage.clear(); } catch { /* private mode */ }
     }
 
-    // 3. Force a UI synchronization loop by hard-navigating to the
-    //    login page (the index route at "/"). location.replace (vs
-    //    navigate()) discards the current history entry so the back
-    //    button can't return the user to a logged-in route, and a
-    //    full page replace re-mounts every component so any
-    //    React-internal state held by tree-deep memos / contexts is
-    //    discarded along with the in-memory store handle. Guarded
-    //    for non-browser environments (Vitest's default Node runner).
-    //    After the reload, persist re-hydrates the preserved
-    //    credentials from localStorage and the Login form can
-    //    accept username + password directly.
+    // Hard-navigate to the index. location.replace discards the
+    // current history entry so the back button can't return the user
+    // to a logged-in route; the full page replace also re-mounts
+    // every component, discarding any React-internal state held by
+    // tree-deep memos or contexts. Guarded for non-browser
+    // environments (Vitest's default Node runner).
     if (typeof window !== "undefined" && typeof window.location !== "undefined") {
       try { window.location.replace("/"); } catch { /* jsdom: navigation not implemented */ }
     }
@@ -489,7 +480,7 @@ export const createIdentitySlice: StateCreator<
 
     // Resolve the target. Two cases are valid:
     //   (a) Target is in the seeded users[] array (the mock registry).
-    //   (b) Target is the live session user but isn't in users[] —
+    //   (b) Target is the live session user but isn't in users[]
     //       this happens when the operator registered with a username
     //       that doesn't match any seed (e.g. "wreakage_fixer"). The
     //       AdminDatabaseView's projection surfaces them via
@@ -514,7 +505,7 @@ export const createIdentitySlice: StateCreator<
     }
 
     // Secure API mock POST. The actual mutation happens locally on the
-    // line after — the API call is the authz/audit boundary in a real
+    // line after, the API call is the authz/audit boundary in a real
     // product, not the persistence boundary.
     await mockAdminPromoteApi(username, state.loginNullifier);
 
@@ -530,7 +521,7 @@ export const createIdentitySlice: StateCreator<
     // 2. If we promoted the current session user, mirror the change
     //    into the identity slice so role-gated views (AdminDatabase
     //    View) see the new role immediately. Otherwise the change
-    //    only lives in the users array — the promoted user picks it
+    //    only lives in the users array, the promoted user picks it
     //    up on their own next login.
     let totpEnrolment: { secret: string; uri: string } | null = null;
     if (isSelf) {
@@ -538,11 +529,11 @@ export const createIdentitySlice: StateCreator<
 
       // 3. Provision the TOTP property so the promoted user can pass
       //    the secondary security gate. If they already have a
-      //    secret enrolled, leave it alone — the existing one is
+      //    secret enrolled, leave it alone, the existing one is
       //    still valid. If not, generate a fresh one and surface it
       //    to the caller so the UI can show the QR / URI for
       //    enrolment in an authenticator app. We do NOT auto-flip
-      //    adminVerified — the user still has to scan the secret and
+      //    adminVerified, the user still has to scan the secret and
       //    enter a fresh code to actually unlock the gate.
       if (!state.totpSecret) {
         const secret = generateSecret();
@@ -584,7 +575,7 @@ export const createIdentitySlice: StateCreator<
 
     await mockAdminDemoteApi(username, state.loginNullifier);
 
-    // Mock-registry write — no-op when target isn't in users[].
+    // Mock-registry write, no-op when target isn't in users[].
     set((s) => ({
       users: s.users.map((u) =>
         u.username === username ? { ...u, role: "citizen" } : u,
@@ -632,12 +623,12 @@ export const createIdentitySlice: StateCreator<
     }
 
     // canonicalizeOrThrow surfaces CypriotIdFormatError for malformed
-    // input — same precondition the register action uses.
+    // input, same precondition the register action uses.
     const canonical = canonicalizeOrThrow(rawCitizenId);
     const next = await deriveIdentityNullifier(canonical);
 
     // No-op when the new canonical resolves to the same nullifier as
-    // the current one — we deliberately do NOT clobber the previous
+    // the current one, we deliberately do NOT clobber the previous
     // slot with a duplicate of the current value. The slot is reserved
     // for the most recent *prior* binding.
     if (next === state.identityNullifier) {

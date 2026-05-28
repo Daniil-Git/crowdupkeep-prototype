@@ -35,7 +35,7 @@ export function Register() {
       // Password and canonical citizen ID both feed the dual-derivation:
       //   identityNullifier ← PBKDF2(canonicalId, identity-salt)
       //   loginNullifier    ← PBKDF2(password,    login-salt+username)
-      // The two are independent — leaking one cannot reveal the other.
+      // The two are independent, leaking one cannot reveal the other.
       await register({ username, password, rawCitizenId: canonical });
       toast.success("Account created and verified!");
       setTimeout(() => navigate("/dashboard"), 600);

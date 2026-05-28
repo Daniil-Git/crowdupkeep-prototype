@@ -1,6 +1,6 @@
 // Canonicalisation + format validation for Cypriot national IDs.
 //
-// We never feed raw user input to the cryptographic pipeline — instead
+// We never feed raw user input to the cryptographic pipeline, instead
 // the input is normalised down to "exactly 10 digits" (the Cypriot ID
 // format we target) so that:
 //
@@ -10,7 +10,7 @@
 //     both produce identical canonical strings and therefore identical
 //     hashes downstream.
 //
-// `canonicalizeOrThrow` is the strict entry point — callers from the
+// `canonicalizeOrThrow` is the strict entry point, callers from the
 // crypto path use it so they can never accidentally derive a nullifier
 // from invalid input. The non-throwing `canonicalize` + `isValidCypriotId`
 // pair is for UI live-validation (every keystroke).

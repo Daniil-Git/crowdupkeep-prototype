@@ -9,19 +9,19 @@ import {
 // The ownership keypair is the load-bearing primitive of the zero-
 // knowledge login proof. The tests below pin down the four
 // properties the login flow relies on:
-//   1. Determinism — same (password, username) ⇒ same publicKey
+//   1. Determinism, same (password, username) ⇒ same publicKey
 //      ⇒ same signature for a given nonce. This is what lets the
 //      prototype work without per-user random salts stored
 //      server-side.
-//   2. Round-trip — verifySignature accepts a fresh signature over
+//   2. Round-trip, verifySignature accepts a fresh signature over
 //      a fresh nonce.
-//   3. Wrong-password rejection — verifySignature rejects a
+//   3. Wrong-password rejection, verifySignature rejects a
 //      signature made with a different password (the actual
 //      authentication check, dressed up in asymmetric crypto).
-//   4. Anti-replay shape — generateAuthChallenge produces fresh
+//   4. Anti-replay shape, generateAuthChallenge produces fresh
 //      hex-encoded values each call and never repeats.
 
-describe("deriveOwnershipKeypair — determinism", () => {
+describe("deriveOwnershipKeypair, determinism", () => {
   it("produces the same publicKeyJwk for the same (password, username) every time", async () => {
     const a = await deriveOwnershipKeypair("hunter2", "alice");
     const b = await deriveOwnershipKeypair("hunter2", "alice");
@@ -40,7 +40,7 @@ describe("deriveOwnershipKeypair — determinism", () => {
 
   it("produces a DIFFERENT publicKey for a different username (same password)", async () => {
     // Username is the PBKDF2 salt, so alice/hunter2 and bob/hunter2
-    // derive distinct keypairs — exactly the property that lets us
+    // derive distinct keypairs, exactly the property that lets us
     // get away without a per-user random salt server-side.
     const a = await deriveOwnershipKeypair("hunter2", "alice");
     const b = await deriveOwnershipKeypair("hunter2", "bob");
@@ -60,7 +60,7 @@ describe("deriveOwnershipKeypair — determinism", () => {
   });
 });
 
-describe("signChallenge + verifySignature — round-trip", () => {
+describe("signChallenge + verifySignature, round-trip", () => {
   it("verifies a fresh signature over a fresh nonce against the matching public key", async () => {
     const { privateKey, publicKeyJwk } = await deriveOwnershipKeypair("hunter2", "alice");
     const { nonce } = await generateAuthChallenge();
@@ -71,7 +71,7 @@ describe("signChallenge + verifySignature — round-trip", () => {
   it("REJECTS a signature made with a different password (wrong-password rejection)", async () => {
     // alice/hunter2 stores publicKey A. A login attempt with the
     // wrong password produces signature B from keypair B; verifying
-    // B against A's publicKey must reject — that IS the password
+    // B against A's publicKey must reject, that IS the password
     // check, dressed up as asymmetric crypto.
     const stored = await deriveOwnershipKeypair("hunter2", "alice");
     const attempt = await deriveOwnershipKeypair("WRONG-PASSWORD", "alice");
@@ -101,7 +101,7 @@ describe("signChallenge + verifySignature — round-trip", () => {
 
   it("returns false (does not throw) for a malformed JWK", async () => {
     // Defensive: caller shouldn't need to wrap verifySignature in
-    // a try/catch for invalid stored values — return false instead.
+    // a try/catch for invalid stored values, return false instead.
     const { privateKey } = await deriveOwnershipKeypair("hunter2", "alice");
     const { nonce } = await generateAuthChallenge();
     const sig = await signChallenge(privateKey, nonce);
@@ -120,7 +120,7 @@ describe("signChallenge + verifySignature — round-trip", () => {
   });
 });
 
-describe("generateAuthChallenge — anti-replay shape", () => {
+describe("generateAuthChallenge, anti-replay shape", () => {
   it("produces a 64-hex-char nonce and 32-hex-char challengeId", async () => {
     const c = await generateAuthChallenge();
     expect(c.nonce).toMatch(/^[0-9a-f]{64}$/);    // 32 bytes

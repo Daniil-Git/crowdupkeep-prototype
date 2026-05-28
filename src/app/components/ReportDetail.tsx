@@ -151,7 +151,7 @@ export function ReportDetail() {
     const result = acceptSolution(report.id, solutionId);
     if (result) {
       toast.success(
-        `Solution accepted — ${result.solverName} earned ${result.xpAwarded} XP!`,
+        `Solution accepted! ${result.solverName} earned ${result.xpAwarded} XP.`,
       );
     }
   };
@@ -191,7 +191,7 @@ export function ReportDetail() {
           </div>
         </div>
 
-        {/* Photo carousel — wrapped with ImageWithFallback so a 404'd
+        {/* Photo carousel, wrapped with ImageWithFallback so a 404'd
             Unsplash URL collapses to a placeholder rather than rendering as
             a broken-image icon. */}
         <div className="relative bg-gray-100">

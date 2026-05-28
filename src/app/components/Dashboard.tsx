@@ -23,7 +23,7 @@ export function Dashboard() {
     // Re-arm the 3-second trigger every time the active district
     // changes. Without `selectedDistrict` in the deps, the user could
     // dismiss the popup, switch to a district with pending issues, and
-    // never see it again until a full reload — the timer only fired
+    // never see it again until a full reload, the timer only fired
     // once at mount. Reading the latest store state inside the
     // callback (vs. closing over `selectedDistrict` directly) keeps
     // the check honest if the user re-selects a district mid-window
@@ -41,7 +41,7 @@ export function Dashboard() {
     return () => clearTimeout(timer);
   }, [selectedDistrict]);
 
-  // The district filter intentionally only narrows "My Reports" too — when
+  // The district filter intentionally only narrows "My Reports" too, when
   // the user picks "Molos" they expect to see only their Molos issues
   // alongside the filtered map. "All Locations" is the no-op default.
   const myReports = useMemo(
@@ -105,7 +105,7 @@ export function Dashboard() {
             <h3 className="mb-3">My Reports</h3>
             {myReports.length === 0 ? (
               <p className="text-sm text-gray-500">
-                No reports yet for this area — tap + to add one.
+                No reports yet for this area. Tap + to add one.
               </p>
             ) : (
               <div className="space-y-2">

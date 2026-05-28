@@ -3,7 +3,7 @@
 // This file exercises devConsoleApi.devAdmin, which calls
 // window.location.assign on the way to /admin. The repo-wide default
 // vitest environment is "node" (no window), so we opt this file into
-// jsdom — which exposes window.location and lets us spy on assign.
+// jsdom, which exposes window.location and lets us spy on assign.
 // Other devConsole helpers that don't touch the DOM continue to work
 // fine in node; only this surface needs the browser-shaped globals.
 
@@ -13,7 +13,7 @@ import devConsoleApi from "@/app/store/devConsole";
 
 // The dev console is a side-effect module that attaches window.cu and
 // logs an info banner at import time. Tests exercise the api object
-// directly via the default export — no need to spelunk through window.
+// directly via the default export, no need to spelunk through window.
 const resetStore = () => {
   useAppStore.persist.clearStorage();
   useAppStore.setState(useAppStore.getInitialState(), true);
@@ -58,7 +58,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("cu.devAdmin — one-shot admin bypass + auto-navigate", () => {
+describe("cu.devAdmin, one-shot admin bypass + auto-navigate", () => {
   it("flips role to admin and adminVerified to true in a single synchronous call", () => {
     const { restore } = installLocationStub(() => { /* intercept */ });
     try {
@@ -89,7 +89,7 @@ describe("cu.devAdmin — one-shot admin bypass + auto-navigate", () => {
     // Real jsdom behaviour: window.location.assign throws "Not
     // implemented: navigation". The try/catch inside devAdmin must
     // swallow that so unit tests calling devAdmin don't blow up, AND
-    // the state flip must still land — otherwise a navigation failure
+    // the state flip must still land, otherwise a navigation failure
     // would leave the operator's session half-promoted.
     const { restore } = installLocationStub(() => {
       throw new Error("simulated jsdom navigation failure");

@@ -1,17 +1,12 @@
-// Pure projection from the gamification user list + the live identity
+// Projection from the gamification user list plus the live identity
 // slice into the anonymized rows the admin database view renders.
+// Factored out so the three branches (no session, session overlays
+// a seed row, session appends a new row) can be tested without
+// mounting React.
 //
-// The point of factoring this out (vs inline useMemo inside the
-// component) is testability: the projection has three branches —
-// no session overlay, session overlays an existing seed row,
-// session appends a brand-new row — and each is worth pinning down
-// without mounting React.
-//
-// CRITICAL: the projection drops every field that is NOT one of the
-// four anonymized columns (username, identityNullifierHex,
-// loginNullifierHex, role). Email, XP, streak, avatar, location —
-// none of them flow through. Removing this guard would re-leak PII
-// into the admin surface.
+// The projection drops every field that is not one of the anonymized
+// columns. Email, XP, streak, avatar, and location never flow through.
+// Removing that guard would re-leak PII into the admin surface.
 
 import type { UiUser } from "@/app/store/appStore";
 
@@ -25,7 +20,7 @@ export interface AnonymizedRegistryRow {
   identityNullifierHex: string;
   loginNullifierHex: string;
   // Most-recent prior identity binding (set by reuploadIdentity). Null
-  // for rows whose owner has never re-uploaded — those will render the
+  // for rows whose owner has never re-uploaded, those will render the
   // `—` placeholder in the admin table.
   previousIdentityNullifierHex: string | null;
   role: "admin" | "citizen";
@@ -39,7 +34,7 @@ export interface IdentitySessionInput {
   // previousIdentityNullifierHex column too.
   previousIdentityNullifier: string | null;
   loginNullifier: string | null;
-  // Role of the live session — only used to set role on a newly-appended
+  // Role of the live session, only used to set role on a newly-appended
   // row when the session user does not exist in the seed list. For an
   // overlay onto an existing row, the seed user's role is the one shown.
   role: "admin" | "citizen" | null;
@@ -53,8 +48,8 @@ export function buildAnonymizedRegistry(
   users: ReadonlyArray<UiUser>,
   session: IdentitySessionInput,
 ): AnonymizedRegistryRow[] {
-  // Start with the seed users projected down to ONLY the anonymized
-  // columns. Anything else from UiUser is intentionally dropped here.
+  // Start with the seed users projected down to just the anonymized
+  // columns. Anything else from UiUser is dropped here.
   const rows: AnonymizedRegistryRow[] = users.map((u) => ({
     id: u.id,
     username: u.username,
@@ -83,7 +78,7 @@ export function buildAnonymizedRegistry(
       ...rows[existing],
       identityNullifierHex: session.identityNullifier,
       loginNullifierHex: session.loginNullifier,
-      // Overlay the prior-binding column too — the slice is the live
+      // Overlay the prior-binding column too, the slice is the live
       // source of truth for the most-recent prior identity nullifier.
       previousIdentityNullifierHex: session.previousIdentityNullifier,
     };
@@ -93,7 +88,7 @@ export function buildAnonymizedRegistry(
   // Append: the registered username does not exist in the seed list.
   // This is the "fresh username at registration" case. The new row
   // inherits the session's role (or defaults to "citizen" if the
-  // session role is null — should not happen post-register, but
+  // session role is null, should not happen post-register, but
   // defensive).
   rows.push({
     id: session.currentUserId,

@@ -20,7 +20,7 @@ beforeEach(() => {
   resetStore();
 });
 
-describe("identitySlice — register: gamification users[] sync", () => {
+describe("identitySlice, register: gamification users[] sync", () => {
   it("OVERLAYS the slot at currentUserId when the username does NOT collide with any seed", async () => {
     // Pre-condition: id=7 (the default currentUserId) is the seeded
     // "demo_user" placeholder.
@@ -34,13 +34,13 @@ describe("identitySlice — register: gamification users[] sync", () => {
     });
 
     const s = useAppStore.getState();
-    // Slot at id=7 IS the registered user — same id, real identity.
+    // Slot at id=7 IS the registered user, same id, real identity.
     const slotAfter = s.users.find((u) => u.id === 7)!;
     expect(slotAfter.username).toBe("wreakage_fixer");
     expect(slotAfter.email).toBe("wreakage_fixer@limassol.cy");
     expect(slotAfter.identityNullifierHex).toBe(s.identityNullifier);
     expect(slotAfter.loginNullifierHex).toBe(s.loginNullifier);
-    // No double-row — the previous "demo_user" placeholder is gone,
+    // No double-row, the previous "demo_user" placeholder is gone,
     // not appended elsewhere in the array.
     expect(s.users.find((u) => u.username === "demo_user")).toBeUndefined();
     // currentUserId stays at the same id; only the slot's content changed.
@@ -50,7 +50,7 @@ describe("identitySlice — register: gamification users[] sync", () => {
   it("ADOPTS the existing slot when the registered name matches a seed (no double-row)", async () => {
     // "civic_hero" is id=1 in the seed. Registering with that name
     // should move currentUserId to id=1 and overlay the seed's
-    // nullifier hex columns with the real PBKDF2 outputs — NOT
+    // nullifier hex columns with the real PBKDF2 outputs, NOT
     // create a second civic_hero row at id=7.
     await useAppStore.getState().register({
       username: "civic_hero",
@@ -98,7 +98,7 @@ describe("identitySlice — register: gamification users[] sync", () => {
   });
 });
 
-describe("identitySlice — register", () => {
+describe("identitySlice, register", () => {
   it("derives and stores both nullifiers, marks the user authenticated", async () => {
     const { register } = useAppStore.getState();
     const out = await register({
@@ -122,7 +122,7 @@ describe("identitySlice — register", () => {
     // The publicKey is the server-side half of the zero-knowledge
     // proof: stored at register, read at login to verify the
     // signature over the challenge nonce. The private half is never
-    // persisted — re-derived from typed credentials each login.
+    // persisted, re-derived from typed credentials each login.
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -166,7 +166,7 @@ describe("identitySlice — register", () => {
     expect(useAppStore.getState().username).toBeNull();
   });
 
-  it("canonicalises the citizen ID before deriving — '12-34 56 78-90' equals '1234567890'", async () => {
+  it("canonicalises the citizen ID before deriving, '12-34 56 78-90' equals '1234567890'", async () => {
     const a = await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -184,12 +184,12 @@ describe("identitySlice — register", () => {
   });
 });
 
-describe("identitySlice — login (strict username + password)", () => {
+describe("identitySlice, login (strict username + password)", () => {
   // Helper: register an account, then simulate "session de-authed
-  // but credentials still cached" — exactly the state hydrate
+  // but credentials still cached", exactly the state hydrate
   // produces on page reload, which is the realistic precondition
   // for login(). NOTE: we do NOT call logout() here, because round 3
-  // made logout memory-sanitising — it wipes the cache that login()
+  // made logout memory-sanitising, it wipes the cache that login()
   // needs to compare against. Use a direct setState to flip just
   // isAuthenticated.
   const seedAccount = async () => {
@@ -253,7 +253,7 @@ describe("identitySlice — login (strict username + password)", () => {
     expect(ok).toBe(false);
   });
 
-  it("uses PBKDF2-derived comparison — the stored value equals deriveLoginNullifier(password, username)", async () => {
+  it("uses PBKDF2-derived comparison, the stored value equals deriveLoginNullifier(password, username)", async () => {
     // Confirms the slice did not apply any extra transformation on top
     // of the lib helper. If these ever drift, the slice is hashing
     // differently than what the lib re-derives during login.
@@ -276,18 +276,18 @@ describe("identitySlice — login (strict username + password)", () => {
   });
 });
 
-describe("identitySlice — login (zero-knowledge ownership proof, round 5)", () => {
+describe("identitySlice, login (zero-knowledge ownership proof, round 5)", () => {
   // The round-5 login flow layers an Ed25519 signature over the
   // existing username + loginNullifier check. The login succeeds
   // ONLY when the signature verifies against the stored
-  // ownershipPublicKey — so a leaked loginNullifier alone (e.g.
+  // ownershipPublicKey, so a leaked loginNullifier alone (e.g.
   // a localStorage dump) is insufficient to authenticate.
 
   it("REJECTS login when the ownership public key was never stored (pre-v7 snapshot shape)", async () => {
     // Simulate the state a v6 user would hydrate into: nullifier is
     // present, but no ownership public key. Without it the v7 login
     // flow has nothing to verify the signature against, so it must
-    // reject — closing the wire-protocol-only authn loophole.
+    // reject, closing the wire-protocol-only authn loophole.
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -308,7 +308,7 @@ describe("identitySlice — login (zero-knowledge ownership proof, round 5)", ()
   it("REJECTS login when the stored public key is corrupted (defensive parse)", async () => {
     // If something writes garbage into the persisted blob, login
     // should refuse rather than throw. The JSON.parse inside
-    // mockAuthLoginApi is wrapped — verify that branch is exercised.
+    // mockAuthLoginApi is wrapped, verify that branch is exercised.
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -330,7 +330,7 @@ describe("identitySlice — login (zero-knowledge ownership proof, round 5)", ()
     // username from a victim's device but doesn't have their
     // password. They register their own ownership keypair under a
     // different password and try to swap it in. The signature they
-    // produce verifies against THEIR public key — not the victim's.
+    // produce verifies against THEIR public key, not the victim's.
     // Conversely, planting the victim's public key without knowing
     // their password means they can't produce a verifying signature.
     await useAppStore.getState().register({
@@ -345,7 +345,7 @@ describe("identitySlice — login (zero-knowledge ownership proof, round 5)", ()
     // the public key has been swapped to one derived from a different
     // password. The login attempt re-derives the signature from the
     // typed password ("hunter2") and signs with hunter2's private
-    // key — but the stored public key is for a DIFFERENT keypair,
+    // key, but the stored public key is for a DIFFERENT keypair,
     // so the signature cannot verify.
     resetStore();
     await useAppStore.getState().register({
@@ -372,12 +372,12 @@ describe("identitySlice — login (zero-knowledge ownership proof, round 5)", ()
     expect(ok).toBe(false);
   });
 
-  it("ACCEPTS login after register — full pipeline (challenge + sign + verify) round-trips end-to-end", async () => {
+  it("ACCEPTS login after register, full pipeline (challenge + sign + verify) round-trips end-to-end", async () => {
     // Sanity end-to-end: register stores publicKey, login re-derives
     // privateKey, signs a fresh nonce, mockAuthLoginApi verifies and
     // returns true. The fact that this works without any per-user
     // random salt stored server-side IS the prototype's headline
-    // property — pin it down.
+    // property, pin it down.
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -393,7 +393,7 @@ describe("identitySlice — login (zero-knowledge ownership proof, round 5)", ()
   });
 });
 
-describe("identitySlice — admin TOTP (unchanged by login refactor)", () => {
+describe("identitySlice, admin TOTP (unchanged by login refactor)", () => {
   it("enrollTotp persists a secret and returns a valid otpauth:// URI", async () => {
     const out = await useAppStore.getState().enrollTotp("admin");
     expect(out.secret).toMatch(/^[A-Z2-7]+$/);
@@ -430,7 +430,7 @@ describe("identitySlice — admin TOTP (unchanged by login refactor)", () => {
   });
 });
 
-describe("identitySlice — session-only logout (credential triple preserved)", () => {
+describe("identitySlice, session-only logout (credential triple preserved)", () => {
   it("clears ONLY session access flags, preserves credential triple and derived identity material", async () => {
     // Build maximally-populated identity state: registered, admin-promoted,
     // TOTP enrolled + verified.
@@ -466,17 +466,17 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
     useAppStore.getState().logout();
     const after = useAppStore.getState();
 
-    // Session flags — cleared.
+    // Session flags, cleared.
     expect(after.isAuthenticated).toBe(false);
     expect(after.role).toBeNull();
     expect(after.adminVerified).toBe(false);
 
-    // Credential triple — preserved verbatim.
+    // Credential triple, preserved verbatim.
     expect(after.username).toBe(usernameBefore);
     expect(after.loginNullifier).toBe(loginNullifierBefore);
     expect(after.ownershipPublicKey).toBe(ownershipPublicKeyBefore);
 
-    // Derived identity material — preserved (not part of the
+    // Derived identity material, preserved (not part of the
     // session-flag set, so the "clear only access flags" rule keeps
     // these in place too).
     expect(after.identityNullifier).toBe(identityNullifierBefore);
@@ -504,7 +504,7 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
   });
 
   it("clears sessionStorage (defensive sweep for accidentally-leaked secrets)", async () => {
-    if (typeof sessionStorage === "undefined") return; // Node env without jsdom — skip
+    if (typeof sessionStorage === "undefined") return; // Node env without jsdom, skip
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -522,7 +522,7 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
     // session access flags, the credential triple (username +
     // loginNullifier + ownershipPublicKey) survives the persist
     // write so a returning user on the same device can re-authenticate
-    // with username + password — the contract this prototype demo
+    // with username + password, the contract this prototype demo
     // relies on for repeatable evaluation cycles.
     if (typeof localStorage === "undefined") return; // skip in pure Node
     await useAppStore.getState().register({
@@ -533,7 +533,7 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
     const cachedNullifier = useAppStore.getState().loginNullifier!;
     useAppStore.getState().logout();
     const blob = localStorage.getItem("crowdupkeep-state-v1");
-    if (!blob) return; // implementation may delay write — skip rather than flake
+    if (!blob) return; // implementation may delay write, skip rather than flake
     expect(blob).toContain(cachedNullifier);
     expect(blob).toContain("alice");
   });
@@ -541,7 +541,7 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
   it("a logged-out user CAN log back in with the same password (credential triple preserved across logout)", async () => {
     // Contract: logout drops the session access flags but keeps the
     // credential triple on disk. A returning user therefore logs in
-    // with username + password alone — no re-registration with the
+    // with username + password alone, no re-registration with the
     // citizen ID is required. This is the demo-ergonomics property
     // the prototype's evaluation flow depends on.
     await useAppStore.getState().register({
@@ -558,11 +558,11 @@ describe("identitySlice — session-only logout (credential triple preserved)", 
   });
 });
 
-describe("identitySlice — logout does NOT call persist.clearStorage (credential-retention contract)", () => {
+describe("identitySlice, logout does NOT call persist.clearStorage (credential-retention contract)", () => {
   it("does NOT invoke useAppStore.persist.clearStorage on logout (blanket purge replaced with partial slice reset)", async () => {
     // Contract inversion: the earlier "secure logout" implementation
     // called persist.clearStorage to wipe the entire persisted blob.
-    // The credential-retention contract drops that call — logout
+    // The credential-retention contract drops that call, logout
     // performs only a partial slice reset (session access flags),
     // leaving the persisted blob (including the credential triple)
     // in place for the next login attempt.
@@ -582,7 +582,7 @@ describe("identitySlice — logout does NOT call persist.clearStorage (credentia
       const callsAfterRegister = clearCalls;
       useAppStore.getState().logout();
       // No additional clearStorage invocations should have happened
-      // during logout — the partial-reset path bypasses it entirely.
+      // during logout, the partial-reset path bypasses it entirely.
       expect(clearCalls).toBe(callsAfterRegister);
       // Post-condition: credential triple still intact, session flags
       // dropped.
@@ -638,7 +638,7 @@ describe("identitySlice — logout does NOT call persist.clearStorage (credentia
   });
 });
 
-describe("identitySlice — promoteToAdmin (round 4)", () => {
+describe("identitySlice, promoteToAdmin (round 4)", () => {
   it("REJECTS when caller is not authenticated (no loginNullifier on this device)", async () => {
     // Fresh store, no register.
     expect(useAppStore.getState().loginNullifier).toBeNull();
@@ -658,7 +658,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     ).rejects.toThrow(/not found in registry/);
   });
 
-  it("IS IDEMPOTENT — re-promoting an already-admin user reports alreadyAdmin and does not double-write", async () => {
+  it("IS IDEMPOTENT, re-promoting an already-admin user reports alreadyAdmin and does not double-write", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -674,7 +674,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     expect(after).toEqual(before); // unchanged object shape
   });
 
-  it("PROMOTES ANOTHER user — updates the registry but NOT the live identity slice", async () => {
+  it("PROMOTES ANOTHER user, updates the registry but NOT the live identity slice", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -693,12 +693,12 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     // Registry updated.
     expect(useAppStore.getState().users.find((u) => u.username === "green_warrior")!.role)
       .toBe("admin");
-    // Live identity slice unchanged — alice did NOT inherit
+    // Live identity slice unchanged, alice did NOT inherit
     // green_warrior's promotion.
     expect(useAppStore.getState().role).toBe(sessionRoleBefore);
   });
 
-  it("PROMOTES SELF — updates registry AND identity slice AND provisions TOTP secret", async () => {
+  it("PROMOTES SELF, updates registry AND identity slice AND provisions TOTP secret", async () => {
     // Register as a citizen who matches a seed username.
     await useAppStore.getState().register({
       username: "civic_hero",
@@ -727,7 +727,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     expect(result.totpEnrolment!.uri.startsWith("otpauth://totp/")).toBe(true);
   });
 
-  it("DOES NOT auto-pass the TOTP gate — adminVerified stays false post-promotion", async () => {
+  it("DOES NOT auto-pass the TOTP gate, adminVerified stays false post-promotion", async () => {
     // Provisioning a secret is bootstrap, not bypass. The admin still
     // has to scan the secret + enter a fresh code to flip
     // adminVerified. This pins down the intentional decoupling.
@@ -741,7 +741,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     expect(useAppStore.getState().adminVerified).toBe(false);
   });
 
-  it("RESPECTS an existing TOTP secret — does not regenerate on re-promotion", async () => {
+  it("RESPECTS an existing TOTP secret, does not regenerate on re-promotion", async () => {
     await useAppStore.getState().register({
       username: "civic_hero",
       password: "hunter2",
@@ -751,7 +751,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
     const secretAfterFirstPromote = useAppStore.getState().totpSecret;
     expect(secretAfterFirstPromote).not.toBeNull();
 
-    // Demote and re-promote — the existing TOTP secret should NOT
+    // Demote and re-promote, the existing TOTP secret should NOT
     // be regenerated underneath the user (which would invalidate
     // their already-enrolled authenticator).
     useAppStore.setState((s) => ({
@@ -768,7 +768,7 @@ describe("identitySlice — promoteToAdmin (round 4)", () => {
   });
 });
 
-describe("identitySlice — promoteToAdmin (session-user tolerance)", () => {
+describe("identitySlice, promoteToAdmin (session-user tolerance)", () => {
   it("PROMOTES the session user even when they are NOT in users[] (registered with a non-seed username)", async () => {
     // wreakage_fixer is NOT one of the seeded usernames in mockData.
     // Before the tolerance change, the action would throw because
@@ -800,7 +800,7 @@ describe("identitySlice — promoteToAdmin (session-user tolerance)", () => {
     // (which flips both identity.role and users[7].role to admin in
     // lockstep), then re-promote to assert idempotency. The
     // previous version of this test used setRole("admin") as a
-    // shortcut — that bypassed the registry write by design and
+    // shortcut, that bypassed the registry write by design and
     // left the two layers out of sync, which made the re-promote
     // hit the reconciliation path instead of the idempotent return.
     await useAppStore.getState().register({
@@ -818,7 +818,7 @@ describe("identitySlice — promoteToAdmin (session-user tolerance)", () => {
   });
 });
 
-describe("identitySlice — demoteFromAdmin", () => {
+describe("identitySlice, demoteFromAdmin", () => {
   it("REJECTS when caller is not authenticated", async () => {
     expect(useAppStore.getState().loginNullifier).toBeNull();
     await expect(
@@ -837,7 +837,7 @@ describe("identitySlice — demoteFromAdmin", () => {
     ).rejects.toThrow(/not found in registry/);
   });
 
-  it("IS IDEMPOTENT — re-demoting an already-citizen user reports alreadyCitizen and does not double-write", async () => {
+  it("IS IDEMPOTENT, re-demoting an already-citizen user reports alreadyCitizen and does not double-write", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -852,7 +852,7 @@ describe("identitySlice — demoteFromAdmin", () => {
     expect(after).toEqual(before);
   });
 
-  it("DEMOTES ANOTHER user — updates the registry but NOT the live identity slice", async () => {
+  it("DEMOTES ANOTHER user, updates the registry but NOT the live identity slice", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -873,7 +873,7 @@ describe("identitySlice — demoteFromAdmin", () => {
     expect(useAppStore.getState().role).toBe(sessionRoleBefore);
   });
 
-  it("DEMOTES SELF — flips session role to citizen AND resets adminVerified, leaves totpSecret intact", async () => {
+  it("DEMOTES SELF, flips session role to citizen AND resets adminVerified, leaves totpSecret intact", async () => {
     await useAppStore.getState().register({
       username: "civic_hero",
       password: "hunter2",
@@ -893,7 +893,7 @@ describe("identitySlice — demoteFromAdmin", () => {
     // Registry write.
     expect(useAppStore.getState().users.find((u) => u.username === "civic_hero")!.role)
       .toBe("citizen");
-    // Session role + admin-verified flag both reset — admin views
+    // Session role + admin-verified flag both reset, admin views
     // re-lock immediately on the next render.
     expect(useAppStore.getState().role).toBe("citizen");
     expect(useAppStore.getState().adminVerified).toBe(false);
@@ -919,7 +919,7 @@ describe("identitySlice — demoteFromAdmin", () => {
   });
 });
 
-describe("identitySlice — role-based access", () => {
+describe("identitySlice, role-based access", () => {
   it("defaults a freshly-registered account to citizen", async () => {
     await useAppStore.getState().register({
       username: "alice",
@@ -946,7 +946,7 @@ describe("identitySlice — role-based access", () => {
   });
 });
 
-describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
+describe("identitySlice, reuploadIdentity (rotating audit slot)", () => {
   // The re-upload action takes a fresh citizen ID, re-derives the
   // identity nullifier from it, and rotates the slot:
   //   previousIdentityNullifier ← old identityNullifier
@@ -977,7 +977,7 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     expect(useAppStore.getState().previousIdentityNullifier).toBeNull();
   });
 
-  it("ROTATES on first re-upload — current → previous, new → current", async () => {
+  it("ROTATES on first re-upload, current → previous, new → current", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -1000,7 +1000,7 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     expect(s.previousIdentityNullifier).toBe(initial);
   });
 
-  it("ROTATES on second re-upload — previous slot holds the most recent prior, NOT the initial", async () => {
+  it("ROTATES on second re-upload, previous slot holds the most recent prior, NOT the initial", async () => {
     await useAppStore.getState().register({
       username: "alice",
       password: "hunter2",
@@ -1016,7 +1016,7 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     const expectedThird = await deriveIdentityNullifier("5555555555");
     const s = useAppStore.getState();
     expect(s.identityNullifier).toBe(expectedThird);
-    // Previous slot holds the SECOND nullifier, not the initial one —
+    // Previous slot holds the SECOND nullifier, not the initial one
     // a rotation, not an append-only log.
     expect(s.previousIdentityNullifier).toBe(second);
     expect(s.previousIdentityNullifier).not.toBe(initial);
@@ -1031,7 +1031,7 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     const initial = useAppStore.getState().identityNullifier!;
     expect(useAppStore.getState().previousIdentityNullifier).toBeNull();
 
-    // Re-upload the SAME ID — different surface (with dashes), same
+    // Re-upload the SAME ID, different surface (with dashes), same
     // canonical. The slot must not rotate because that would clobber
     // the previous slot with a duplicate of the current value.
     const result = await useAppStore.getState().reuploadIdentity({
@@ -1109,7 +1109,7 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     expect(after.adminVerified).toBe(true);
   });
 
-  it("PRESERVES login behaviour — username + password still authenticates after a re-upload", async () => {
+  it("PRESERVES login behaviour, username + password still authenticates after a re-upload", async () => {
     // The whole point of decoupling identity rotation from login: a
     // citizen who rebinds their ID can still log back in with their
     // original password. If this ever breaks, the rotation has
@@ -1128,9 +1128,9 @@ describe("identitySlice — reuploadIdentity (rotating audit slot)", () => {
     expect(ok).toBe(true);
   });
 
-  it("DERIVATION is independent — re-upload nullifier equals deriveIdentityNullifier(newCanonical)", async () => {
+  it("DERIVATION is independent, re-upload nullifier equals deriveIdentityNullifier(newCanonical)", async () => {
     // Pins down that the slice didn't apply any extra transformation
-    // on top of the lib helper — a future refactor that introduces a
+    // on top of the lib helper, a future refactor that introduces a
     // hidden salt would fail this test.
     await useAppStore.getState().register({
       username: "alice",

@@ -12,7 +12,7 @@ import { IdentityInput } from "./IdentityInput";
 import { matchesFilter } from "@/lib/districts";
 import { CypriotIdFormatError } from "@/lib/cypriotId";
 
-// Synthetic XP curve trailing the user's current balance — keeps the chart
+// Synthetic XP curve trailing the user's current balance, keeps the chart
 // meaningful as the live XP changes from accepted solutions.
 function buildXpHistory(currentXp: number) {
   const days = 8;
@@ -42,13 +42,13 @@ export function Profile() {
   const [reuploadOpen, setReuploadOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   // The IdentityInput hands back the canonical 10-digit string once
-  // validated. Only that value ever leaves the input component — see
+  // validated. Only that value ever leaves the input component, see
   // IdentityInput.tsx for the no-image-bytes-ever invariant.
   const [reuploadCanonical, setReuploadCanonical] = useState<string | null>(null);
   // Mount the IdentityInput under a fresh key each time the modal
   // opens so closing-and-reopening starts from a clean text/photo
   // state. Without this, the previous typed value or photo preview
-  // lingers across opens — surprising for a "re-upload" action that
+  // lingers across opens, surprising for a "re-upload" action that
   // should feel like a discrete event each time.
   const [reuploadKey, setReuploadKey] = useState(0);
 
@@ -69,7 +69,7 @@ export function Profile() {
       if (result.changed) {
         toast.success("Identity re-uploaded. Previous binding archived.");
       } else {
-        toast.info("Same ID as currently bound — no change made.");
+        toast.info("Same ID as currently bound. No change made.");
       }
       setReuploadOpen(false);
       setReuploadCanonical(null);
@@ -247,7 +247,7 @@ export function Profile() {
                   Your login password and access are not changed.
                 </p>
                 {/*
-                  The same component the Register flow uses — tabbed
+                  The same component the Register flow uses, tabbed
                   text-only vs photo-plus-text modes, both producing the
                   same canonical 10-digit string. Wiring re-upload
                   through it keeps both paths on a single cryptographic
@@ -282,24 +282,18 @@ export function Profile() {
           </Button>
 
           {/*
-            Logout button. Wired to the store's session-only logout
-            action: clears isAuthenticated / role / adminVerified, sweeps
-            sessionStorage, then a hard window.location.replace('/') so
-            the entire component tree re-mounts (releasing blob URLs
-            and any ephemeral component-local state along the way). The
-            credential triple (username, loginNullifier, ownershipPublicKey)
-            and derived identity material (identityNullifier, totpSecret)
-            are deliberately PRESERVED so the same device can log back
-            in with username + password without re-running the citizen-ID
-            registration flow — the demo-ergonomics contract documented
-            on the logout action.
-            The toast is fired on the same tick — the location.replace
-            is async at the browser level so the toast still renders
-            before the navigation tears the tree down.
+            Session-only logout. Clears isAuthenticated / role /
+            adminVerified, sweeps sessionStorage, then hard-navigates
+            to "/" so the component tree re-mounts. The credential
+            triple and the derived identity material are kept on disk
+            so the same device can log back in with username + password
+            (see the logout action for the trade-off). The toast fires
+            on the same tick; location.replace is async at the browser
+            level so it still renders before the navigation.
           */}
           <Button
             onClick={() => {
-              toast.success("Logged out — log back in with your password.");
+              toast.success("Logged out. Log back in with your password.");
               logout();
             }}
             variant="outline"

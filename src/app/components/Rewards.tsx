@@ -62,15 +62,15 @@ export function Rewards() {
             const canAfford = me.xp >= reward.xpCost;
             const outOfStock = reward.stock === 0;
             // Both "out of stock" and "not enough XP" are disabled
-            // states — the card content (title, cost, stock count)
+            // states, the card content (title, cost, stock count)
             // fades to opacity-60 in either case so the two read as
             // siblings in the "unavailable right now" family. The
             // *differentiator* lives on the image: an out-of-stock
             // reward is a hard, catalogue-wide lock (nothing the user
             // can do from this surface), so the image gets a
             // `grayscale` filter and reads as visually inert. An
-            // affordability lock is soft — earn more XP and it opens
-            // — so the image stays in colour to keep the incentive
+            // affordability lock is soft (earn more XP and it opens),
+            // so the image stays in colour to keep the incentive
             // visible. The overlay chip remains the labelled signpost
             // for the *why*.
             const disabled = outOfStock || !canAfford;
@@ -93,8 +93,8 @@ export function Rewards() {
                       outOfStock ? "grayscale" : ""
                     }`}
                   />
-                  {/* Out-of-stock takes precedence over insufficient XP —
-                      affordability is moot if the reward can't be redeemed
+                  {/* Out-of-stock takes precedence over insufficient XP.
+                      Affordability is moot if the reward can't be redeemed
                       regardless. Same darkening + chip styling so the two
                       unavailable states read as siblings; the chip text
                       labels the difference. */}

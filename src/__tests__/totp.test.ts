@@ -24,7 +24,7 @@ const RFC_VECTORS_SHA1: Array<{ time: number; code: string }> = [
   { time: 1234567890, code: "89005924" },
   { time: 2000000000, code: "69279037" },
   // T=20_000_000_000 is in the vector list but its 8-digit code is
-  // "65353130" — kept here so any future regression is caught early.
+  // "65353130", kept here so any future regression is caught early.
   { time: 20000000000, code: "65353130" },
 ];
 
@@ -56,7 +56,7 @@ describe("generateSecret", () => {
   });
 });
 
-describe("totpCode — RFC 6238 vectors", () => {
+describe("totpCode, RFC 6238 vectors", () => {
   const secret = asciiKeyAsBase32(RFC_KEY_ASCII);
 
   for (const v of RFC_VECTORS_SHA1) {
@@ -71,9 +71,9 @@ describe("totpCode — RFC 6238 vectors", () => {
     });
   }
 
-  it("defaults to 6 digits, 30s steps, SHA-1 — what authenticator apps expect", async () => {
+  it("defaults to 6 digits, 30s steps, SHA-1, what authenticator apps expect", async () => {
     // The 6-digit code is the leading 6 digits of the truncated value,
-    // not the trailing 6 of the 8-digit vector — they're computed
+    // not the trailing 6 of the 8-digit vector, they're computed
     // independently via mod 10^digits. Just assert the format.
     const code = await totpCode(secret, { time: 59 });
     expect(code).toMatch(/^\d{6}$/);

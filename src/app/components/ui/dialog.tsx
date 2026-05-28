@@ -57,7 +57,7 @@ function DialogContent({
   // NotificationOverlay, the TOTP enrolment modal). Radix's check
   // (verified in @radix-ui/react-dialog DescriptionWarning) only
   // warns when an aria-describedby attribute is set on the DOM
-  // node but no matching id exists in the document — passing
+  // node but no matching id exists in the document, passing
   // undefined removes the attribute and skips the warning.
   // Consumers that DO want a description can pass an explicit
   // aria-describedby="some-id" via props; the spread below

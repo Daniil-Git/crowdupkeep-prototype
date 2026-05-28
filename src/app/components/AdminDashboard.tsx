@@ -15,7 +15,7 @@ import { AdminTotpVerify } from "./AdminTotpVerify";
 // district filtering, stats, and search stay consistent across the two
 // surfaces. The previous implementation kept its own `locationFilter`
 // useState with a hardcoded list ("Limassol", "Old Port", "Molos") that
-// drifted from the citizen dropdown — toggling on one side did nothing on
+// drifted from the citizen dropdown, toggling on one side did nothing on
 // the other.
 
 export function AdminDashboard() {
@@ -24,7 +24,7 @@ export function AdminDashboard() {
   const banUser = useAppStore((s) => s.banUser);
   const selectedDistrict = useAppStore((s) => s.selectedDistrict);
   // Admin MFA gate. All hooks below this run unconditionally so the
-  // Rules-of-Hooks order is invariant when `adminVerified` flips —
+  // Rules-of-Hooks order is invariant when `adminVerified` flips;
   // only the rendered output is gated.
   const adminVerified = useAppStore((s) => s.adminVerified);
   const [statusFilter, setStatusFilter] = useState<string>("all");

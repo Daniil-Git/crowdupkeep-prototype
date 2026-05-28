@@ -24,13 +24,12 @@ function resolveYouSentinel(username?: string): string | null {
   return explicit;
 }
 
-// Deterministic-from-username citizen ID. djb2 hash → uint32 →
-// zero-padded 10-digit string. Two cu.becomeUser calls with
-// different usernames produce distinct identity nullifier hexes by
-// default because identityNullifier = PBKDF2(canonicalCitizenId) is
-// a pure function of the citizen ID. The output always passes
-// canonicalizeOrThrow's /^\d{10}$/ check (uint32 max = 4 294 967 295
-// = 10 digits; padStart handles smaller hashes).
+// Deterministic citizen ID derived from a username: djb2 hash folded
+// to a uint32 and zero-padded to ten digits. Used as a default by
+// cu.becomeUser so two different usernames don't collide on the same
+// identity nullifier (identityNullifier = PBKDF2(canonicalCitizenId)
+// is a pure function of the ID). The output always satisfies the
+// /^\d{10}$/ check in canonicalizeOrThrow (uint32 max is 10 digits).
 function devCitizenIdFor(username: string): string {
   let h = 5381;
   for (let i = 0; i < username.length; i++) {
@@ -44,12 +43,12 @@ const api = {
   state: () => useAppStore.getState(),
 
   // General escape hatch. Accepts either a partial object or a setter
-  // function — same signature as Zustand's setState.
+  // function, same signature as Zustand's setState.
   // Example: cu.setState({ currentUserId: 3 })
   // Example: cu.setState((s) => ({ users: s.users.slice(0, 5) }))
   setState: (updater: StoreSetter) => useAppStore.setState(updater),
 
-  // Patch the current user (or another user by id) — XP, streak,
+  // Patch the current user (or another user by id), XP, streak,
   // username, avatar, etc.
   // Example: cu.patchUser({ xp: 2500 })
   // Example: cu.patchUser({ streak: 12 }, 4)
@@ -75,17 +74,15 @@ const api = {
   //   cu.patchReport(101, { status: "solved", difficulty: 5 })
   //   cu.patchReport(1, { rewardId: undefined })  // unlink the reward
   //
-  // Throws if `reportId` is not in the store — a silent no-op would
+  // Throws if reportId is not in the store. A silent no-op would
   // pollute downstream state (popup picker, persisted snapshot) when
-  // the demo operator mistypes an id. An explicit error makes the
-  // mistake visible in the console.
+  // the operator mistypes an id; throwing makes the mistake visible.
   //
-  // For `rewardId`, both `undefined` and `null` are treated as
-  // "unlink": the key is fully removed from the report instead of
-  // being left as `undefined`. This keeps the persisted JSON clean
-  // (no `"rewardId": null` lingering in localStorage) and means the
-  // `report.rewardId == null` branch in getRewardStatusForReport
-  // falls through to the global-stock rule as intended.
+  // For rewardId, both undefined and null are treated as "unlink":
+  // the key is fully removed from the report rather than left as
+  // undefined. Keeps persisted JSON clean and lets the
+  // report.rewardId == null branch in getRewardStatusForReport fall
+  // through to the global-stock rule.
   patchReport: (reportId: number, patch: Partial<UiReport>) => {
     const exists = useAppStore.getState().reports.some((r) => r.id === reportId);
     if (!exists) {
@@ -111,34 +108,29 @@ const api = {
     location.reload();
   },
 
-  // Single-call shortcut to assume a user identity for demos.
-  // Non-destructive by default — typo-grade calls cannot rewrite the
-  // credential triple. Two modes selected by the second argument:
+  // Shortcut to assume a user identity for demos. Non-destructive by
+  // default: a typo can't overwrite the stored credential triple.
   //
-  //   - Second argument OMITTED:
-  //       cu.becomeUser("wreakage_fixer")
+  // Two modes, selected by the second argument:
+  //
+  //   cu.becomeUser("wreakage_fixer")
   //     Reuse path. If a credential triple is already persisted on
-  //     disk for that exact username, flip `isAuthenticated: true`,
-  //     align `currentUserId` to the matching users[] slot, and
-  //     leave loginNullifier / ownershipPublicKey / identityNullifier
-  //     untouched — re-login through the UI keeps working on the
-  //     original password. If no credentials exist for that
-  //     username, a console warning is logged and **no state is
-  //     changed** — the caller can retry with an explicit password
-  //     if they actually want to register.
+  //     disk for that username, flip isAuthenticated and align
+  //     currentUserId to the matching users[] slot. The login
+  //     nullifier, ownership public key, and identity nullifier stay
+  //     as they were, so logging in through the UI still works on
+  //     the original password. If nothing is persisted for that
+  //     username, log a console warning and leave state untouched.
   //
-  //   - Second argument = an explicit PASSWORD string:
-  //       cu.becomeUser("wreakage_fixer", "my_real_password")
-  //     Full register through the store action — PBKDF2 nullifiers,
-  //     Ed25519 ownership keypair, identity slice population, the
-  //     register-time users[] sync. This OVERWRITES any previously
-  //     stored credentials for the username; passing a password is
+  //   cu.becomeUser("wreakage_fixer", "my_real_password")
+  //     Full register: derives PBKDF2 nullifiers, an Ed25519 ownership
+  //     keypair, runs the register-time users[] sync. Will overwrite
+  //     any existing credentials for the username; the password is
   //     the explicit consent signal.
   //
-  // Third argument (rawCitizenId) defaults to a deterministic-from-
-  // username 10-digit hash so two distinct usernames do not collide
-  // on the same identity nullifier hex by default (the identity
-  // derivation is a pure function of the citizen ID).
+  // The optional third argument (rawCitizenId) defaults to a hash
+  // of the username so two different usernames don't share an
+  // identity nullifier hex by default.
   becomeUser: async (
     username: string,
     password?: string,
@@ -164,31 +156,27 @@ const api = {
       }
       // eslint-disable-next-line no-console
       console.warn(
-        `[cu] no credentials persisted for "${username}" on this device — no state was changed. Retry with an explicit password to register: cu.becomeUser("${username}", "yourPassword").`,
+        `[cu] no credentials persisted for "${username}" on this device, no state was changed. Retry with an explicit password to register: cu.becomeUser("${username}", "yourPassword").`,
       );
       return { reused: false, registered: false, username };
     }
 
-    // Explicit-password path: full register. May overwrite prior
-    // stored credentials for this username — that is the documented
-    // contract of passing a password.
+    // Explicit-password path: full register. Overwrites prior stored
+    // credentials for this username if any.
     return useAppStore.getState().register({ username, password, rawCitizenId });
   },
 
-  // Identity-aware helpers — added when the admin DB view shipped.
+  // promoteToAdmin(username?) runs the gated store action (mock API
+  // POST, registry update, TOTP provision for self) and returns the
+  // action's resolved value so the operator can read the generated
+  // TOTP secret/URI from the console. Defaults to the current
+  // session's username when called with no argument.
   //
-  // `promoteToAdmin(username?)` runs the properly-gated store action
-  // (mock API POST + registry update + TOTP provision for self).
-  // Defaults to the current session's username when called with no
-  // argument. Returns the action's resolved value so the operator
-  // can read the freshly-generated TOTP secret/URI from the console.
-  //
-  // Sentinel: the literal string "you" is treated as "the current
-  // session" when a distinct session username is registered. There
-  // IS a seed user named "you" (id=7, mockData.ts), so the sentinel
-  // only kicks in when the session is some OTHER username (e.g. the
-  // operator registered as "wreakage_fixer"). When no session is
-  // active, "you" resolves to the literal seed user as before.
+  // Passing the literal "you" is treated as "the current session"
+  // when a session is active; with no session the sentinel resolves
+  // to "you" as-is, and the underlying action will reject it since
+  // there is no longer a seed user with that name (id=7 is
+  // demo_user after the v8 scrub).
   promoteToAdmin: (username?: string) => {
     const target = resolveYouSentinel(username);
     if (!target) {
@@ -197,10 +185,10 @@ const api = {
     return useAppStore.getState().promoteToAdmin(target);
   },
 
-  // Inverse of promoteToAdmin via the properly-gated store action.
-  // Resolves the "you" sentinel identically. When the target is the
-  // session user, the store also resets role and adminVerified so
-  // the admin views re-lock immediately.
+  // Inverse of promoteToAdmin via the gated store action. Same "you"
+  // sentinel resolution. When the target is the session user, the
+  // store also resets role and adminVerified so the admin views
+  // re-lock immediately.
   demoteFromAdmin: (username?: string) => {
     const target = resolveYouSentinel(username);
     if (!target) {
@@ -209,7 +197,7 @@ const api = {
     return useAppStore.getState().demoteFromAdmin(target);
   },
 
-  // Low-level role setter — bypasses the registry update and the
+  // Low-level role setter, bypasses the registry update and the
   // mock API call. Useful when you want to flip just the live
   // session's role without touching the users[] table.
   setRole: (role: "admin" | "citizen") => useAppStore.getState().setRole(role),
@@ -218,7 +206,7 @@ const api = {
   // the TOTP-passed flag so the admin views re-lock immediately on
   // the next render. Without the adminVerified reset, a session
   // that had previously passed the TOTP gate would still see admin
-  // surfaces until a reload — surprising for the demo operator.
+  // surfaces until a reload, surprising for the demo operator.
   demoteToCitizen: () => {
     useAppStore.getState().setRole("citizen");
     useAppStore.setState({ adminVerified: false });
@@ -235,7 +223,7 @@ const api = {
   //
   // The window.location.assign call is guarded the same way logout()
   // is: jsdom (the Vitest environment) doesn't implement navigation
-  // and throws on assign — the try/catch keeps the function safe to
+  // and throws on assign, the try/catch keeps the function safe to
   // exercise in unit tests, and the typeof checks keep it safe in
   // pure-Node environments.
   devAdmin: () => {
@@ -246,7 +234,7 @@ const api = {
     }
   },
 
-  // Hard logout — same as the in-app Logout button, but reachable from
+  // Hard logout, same as the in-app Logout button, but reachable from
   // anywhere without navigating to a logout-bearing surface.
   logout: () => useAppStore.getState().logout(),
 

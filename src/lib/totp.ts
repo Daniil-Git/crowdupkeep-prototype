@@ -1,20 +1,20 @@
 // RFC 6238 TOTP via native WebCrypto HMAC.
 //
-// No external dependencies — secret generation, base32 encoding,
+// No external dependencies, secret generation, base32 encoding,
 // HMAC, and dynamic truncation are all implemented below using
 // `crypto.getRandomValues` + `crypto.subtle.sign`.
 //
 // Why SHA-1 by default? Compatibility with Google Authenticator /
-// Authy / 1Password / Bitwarden — the `otpauth://` URI default is
+// Authy / 1Password / Bitwarden, the `otpauth://` URI default is
 // `algorithm=SHA1` and most authenticator apps either ignore the
 // algorithm parameter or silently fail on SHA-256. SHA-1's
 // cryptographic weaknesses are about collision resistance, not the
 // HMAC PRF construction TOTP uses (HMAC-SHA1 is still considered
-// safe — see RFC 6151). The `algorithm` option below is exposed
+// safe, see RFC 6151). The `algorithm` option below is exposed
 // for future migration.
 //
 // Constant-time string compare on the 6-digit code is overkill at
-// this entropy level but cheap and correct — included so the
+// this entropy level but cheap and correct, included so the
 // pattern is right if someone copies this into a larger code base.
 
 const DEFAULT_DIGITS = 6;
@@ -116,7 +116,7 @@ export async function totpCode(secret: string, opts: TotpOptions = {}): Promise<
   const key = await crypto.subtle.importKey(
     "raw",
     // TS 5.7+ narrows Uint8Array's generic; the runtime shape is
-    // unchanged — base32ToBytes returns an ArrayBuffer-backed view.
+    // unchanged, base32ToBytes returns an ArrayBuffer-backed view.
     keyBytes as BufferSource,
     { name: "HMAC", hash: algorithm },
     false,

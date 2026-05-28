@@ -185,7 +185,7 @@ dbDescribe("report CRUD and geo queries", () => {
       { email: "near-author@limassol.cy" },
       { client: db.client },
     );
-    // 1km north — inside both 5km and 2km radii.
+    // 1km north, inside both 5km and 2km radii.
     const near = await createReport(
       {
         title: "1km away",
@@ -195,7 +195,7 @@ dbDescribe("report CRUD and geo queries", () => {
       },
       { client: db.client },
     );
-    // 4km north — inside 5km but outside 2km.
+    // 4km north, inside 5km but outside 2km.
     const farish = await createReport(
       {
         title: "4km away",

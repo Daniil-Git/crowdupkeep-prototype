@@ -6,7 +6,7 @@
 //      authenticator app (Google Authenticator, Authy, 1Password,
 //      Bitwarden, etc.). All three are equivalent enrolment payloads.
 //   2. Secret enrolled → 6-digit code field + Verify button.
-//   3. Locked after MAX_ATTEMPTS bad codes — refresh-to-retry.
+//   3. Locked after MAX_ATTEMPTS bad codes, refresh-to-retry.
 //
 // Nothing in this component holds the typed code anywhere beyond local
 // React state; the input is cleared after every attempt so even a
@@ -145,7 +145,7 @@ export function AdminTotpVerify({
               className="w-full"
               onClick={() => setEnrolment(null)}
             >
-              <RefreshCw className="w-4 h-4 mr-2" /> I've enrolled — show verify
+              <RefreshCw className="w-4 h-4 mr-2" /> I've enrolled. Show verify
             </Button>
           </div>
         )}

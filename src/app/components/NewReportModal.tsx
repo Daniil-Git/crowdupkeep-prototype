@@ -26,7 +26,7 @@ interface NewReportModalProps {
 
 // Resolves the District the report should be auto-linked to. The store's
 // global selectedDistrict is the source of truth, but it can be the
-// "All Locations" sentinel — in that case we let the user pick a district
+// "All Locations" sentinel, in that case we let the user pick a district
 // inside the modal so the new pin still lands somewhere matchable.
 function defaultDraftDistrict(filter: LocationFilter): District {
   return filter === ALL_LOCATIONS ? "Centre" : filter;

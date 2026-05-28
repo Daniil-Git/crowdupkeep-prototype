@@ -10,7 +10,7 @@ import type {
 export const LIMASSOL_CENTER = { lat: 34.7071, lng: 33.0226 };
 
 // Synthetic display-only nullifier strings for the admin registry view.
-// These are NOT real PBKDF2 outputs — they exist so the registry table
+// These are NOT real PBKDF2 outputs, they exist so the registry table
 // has anonymized, visually-distinct, 64-hex strings to render for the
 // seeded users (who never went through the live register flow). When
 // the actually-registered current user matches a row by username, the
@@ -105,8 +105,8 @@ export const seedReports: UiReport[] = [
     ],
     solutions: [],
     // Linked to the 0-stock Pizza Hut voucher so the Nearby popup
-    // surfaces the "XP challenge" copy reliably for this report —
-    // useful for thesis demos of the unavailable-reward branch.
+    // surfaces the "XP challenge" copy reliably for this report.
+    // Useful for thesis demos of the unavailable-reward branch.
     rewardId: 5,
   },
   {

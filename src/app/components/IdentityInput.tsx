@@ -1,8 +1,8 @@
 // Unified citizen-ID input. Two UX surfaces, ONE cryptographic path.
 //
 // Modes:
-//   - "text"   — just the 10-digit text field.
-//   - "image"  — file preview + a MANDATORY text-confirmation field
+//   - "text"  , just the 10-digit text field.
+//   - "image" , file preview + a MANDATORY text-confirmation field
 //                below it. The image's bytes are never read, hashed,
 //                or stored beyond a transient blob URL used only to
 //                render the preview. The text field underneath is
@@ -122,7 +122,7 @@ export function IdentityInput({
             {imagePreview ? (
               <img
                 src={imagePreview}
-                alt="ID preview — for your eyes only; never hashed or transmitted"
+                alt="ID preview, for your eyes only; never hashed or transmitted"
                 className="w-full max-h-48 object-contain rounded"
               />
             ) : (
@@ -166,7 +166,7 @@ export function IdentityInput({
               disabled={disabled}
             />
             <p className="text-xs text-gray-500">
-              The photo is shown for your reference only — never sent to the server,
+              The photo is shown for your reference only, never sent to the server,
               never used for the security hash.
             </p>
           </div>

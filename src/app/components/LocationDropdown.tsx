@@ -4,7 +4,7 @@ import { useAppStore } from "../store/appStore";
 import { LOCATION_OPTIONS, type LocationFilter } from "@/lib/districts";
 
 interface LocationDropdownProps {
-  // Visual variant — "header" sits in the dark Dashboard bar,
+  // Visual variant, "header" sits in the dark Dashboard bar,
   // "panel" sits inline in a light card (e.g. Profile).
   variant?: "header" | "panel";
   className?: string;
@@ -12,7 +12,7 @@ interface LocationDropdownProps {
 
 // Reusable dropdown for the "Current Area" filter. Reads / writes the same
 // store key so any change propagates instantly to the map markers and the
-// Nearby Issue picker — no prop drilling, no page reload.
+// Nearby Issue picker, no prop drilling, no page reload.
 export function LocationDropdown({ variant = "panel", className = "" }: LocationDropdownProps) {
   const value = useAppStore((s) => s.selectedDistrict);
   const setSelectedDistrict = useAppStore((s) => s.setSelectedDistrict);

@@ -87,7 +87,7 @@ export async function deriveOwnershipKeypair(
   password: string,
   username: string,
 ): Promise<OwnershipKeypair> {
-  // 1. PBKDF2 — username is the salt, password is the input. Minimum
+  // 1. PBKDF2, username is the salt, password is the input. Minimum
   //    600 000 iterations per the spec; SHA-256 hash.
   const passwordKey = await crypto.subtle.importKey(
     "raw",
@@ -115,7 +115,7 @@ export async function deriveOwnershipKeypair(
   const privateKey = await crypto.subtle.importKey(
     "pkcs8",
     // TS 5.7+ narrows Uint8Array's generic; runtime shape is
-    // unchanged — wrapAsEd25519Pkcs8 returns an ArrayBuffer-backed view.
+    // unchanged, wrapAsEd25519Pkcs8 returns an ArrayBuffer-backed view.
     pkcs8 as BufferSource,
     { name: "Ed25519" },
     true,                          // extractable so we can export jwk for the public side
@@ -123,7 +123,7 @@ export async function deriveOwnershipKeypair(
   );
 
   // 3. Extract the public key. WebCrypto computes it during import
-  //    and exposes it via the JWK export — the `x` field is the
+  //    and exposes it via the JWK export, the `x` field is the
   //    public key bytes (base64url-encoded), `d` is the private seed.
   const privateJwk = await crypto.subtle.exportKey("jwk", privateKey);
   if (!privateJwk.x) {
@@ -188,16 +188,16 @@ export interface AuthChallenge {
 }
 
 export async function generateAuthChallenge(): Promise<AuthChallenge> {
-  // 32-byte nonce — enough domain to make a precomputed signature
+  // 32-byte nonce, enough domain to make a precomputed signature
   // table infeasible across any realistic challenge corpus.
   const nonceBytes = new Uint8Array(32);
   crypto.getRandomValues(nonceBytes);
-  // 16-byte challenge id — enough to make collisions infeasible if
+  // 16-byte challenge id, enough to make collisions infeasible if
   // the server were tracking outstanding challenges to detect replay.
   const idBytes = new Uint8Array(16);
   crypto.getRandomValues(idBytes);
   // Simulate small network latency so async callers exercise the
-  // await. Fixed timing — see anti-enumeration note in the slice.
+  // await. Fixed timing, see anti-enumeration note in the slice.
   await new Promise((resolve) => setTimeout(resolve, 10));
   return {
     challengeId: bytesToHex(idBytes),

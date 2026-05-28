@@ -1,6 +1,6 @@
 // Limassol districts derived from the seed-data addresses. Keeping the list
 // here (rather than on the Prisma model) means the location filter is a pure
-// UI concern — the data layer just stores free-form addresses, and any new
+// UI concern, the data layer just stores free-form addresses, and any new
 // neighbourhood seeded later only needs an entry in DISTRICT_MATCHERS.
 
 import type { LatLng } from "@/lib/geo";

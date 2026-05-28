@@ -4,7 +4,7 @@ import { haversineKm, type LatLng } from "@/lib/geo";
 // Minimal shape this picker needs from a report. Kept narrow so any future
 // report-like value (raw API row, store entry, ad-hoc test fixture) plugs in
 // without coupling to the full UiReport interface. No `[key: string]: unknown`
-// index signature — TS structural subtyping already permits extra fields on
+// index signature, TS structural subtyping already permits extra fields on
 // arguments, and the explicit signature was making concrete types with
 // non-unknown-assignable shapes (`UiReport`'s nested `comments`/`solutions`)
 // fail the index-signature check on TS 5.x, cascading into "type '{}' is not
@@ -22,7 +22,7 @@ export type NearbyPick<T extends NearbyCandidate> =
   | null;
 
 // Picks the closest "pending" report to the user's last known location. When
-// a district filter is active the candidate set is narrowed first — if a user
+// a district filter is active the candidate set is narrowed first, if a user
 // has hidden Dasoudi, the proximity prompt should not surface a Dasoudi
 // issue and break the mental model.
 //
@@ -33,7 +33,7 @@ export type NearbyPick<T extends NearbyCandidate> =
 // Convenience predicate used by both the Dashboard trigger and the overlay's
 // render gate: "is there anything worth opening the popup for?" Keeping it
 // here (next to the picker it wraps) means the answer can't drift between
-// "should we open" and "what would we render" — they share the exact same
+// "should we open" and "what would we render", they share the exact same
 // candidate set.
 export function hasNearbyReport<T extends NearbyCandidate>(
   reports: ReadonlyArray<T>,

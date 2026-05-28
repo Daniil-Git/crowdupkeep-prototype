@@ -64,7 +64,7 @@ export async function createUser(input: CreateUserInput, opts?: ApiOptions) {
       email: input.email,
       xp: input.xp ?? 0,
       streak: input.streak ?? 0,
-      // LatLng is a plain {lat,lng} object — JSON-serialisable —
+      // LatLng is a plain {lat,lng} object, JSON-serialisable
       // but Prisma's InputJsonValue is a recursive union that TS
       // can't narrow our object into automatically. The cast is
       // type-only; Prisma still validates the JSON shape at write.

@@ -30,7 +30,7 @@ const emptySession: IdentitySessionInput = {
   currentUserId: null,
 };
 
-describe("buildAnonymizedRegistry — PII firewall", () => {
+describe("buildAnonymizedRegistry, PII firewall", () => {
   it("only ever emits the four anonymized fields per row (drops email/xp/streak/avatar/location)", () => {
     const users = [
       makeUser({ id: 1, username: "alice", role: "citizen" }),
@@ -39,7 +39,7 @@ describe("buildAnonymizedRegistry — PII firewall", () => {
     const rows = buildAnonymizedRegistry(users, emptySession);
 
     // Every row carries exactly the anonymized columns the table
-    // renders — no email/xp/streak/avatar/location leak. The set is:
+    // renders, no email/xp/streak/avatar/location leak. The set is:
     // id, username, identity/login nullifier hex, previous identity
     // hex (audit slot), role. Login is not rotated by re-upload so
     // there is no previousLoginNullifierHex counterpart.
@@ -64,7 +64,7 @@ describe("buildAnonymizedRegistry — PII firewall", () => {
   });
 });
 
-describe("buildAnonymizedRegistry — branch 1: no active session", () => {
+describe("buildAnonymizedRegistry, branch 1: no active session", () => {
   it("returns one row per seed user, preserving order", () => {
     const users = [
       makeUser({ id: 1, username: "alice", role: "citizen" }),
@@ -80,7 +80,7 @@ describe("buildAnonymizedRegistry — branch 1: no active session", () => {
     const users = [makeUser({ id: 1, username: "alice", role: "citizen" })];
     const partial: IdentitySessionInput = {
       username: "alice",
-      identityNullifier: null,  // ← partial state — projection must not overlay
+      identityNullifier: null,  // ← partial state, projection must not overlay
       previousIdentityNullifier: null,
       loginNullifier: "33".repeat(32),
       role: "citizen",
@@ -95,7 +95,7 @@ describe("buildAnonymizedRegistry — branch 1: no active session", () => {
   });
 });
 
-describe("buildAnonymizedRegistry — branch 2: session overlays existing row", () => {
+describe("buildAnonymizedRegistry, branch 2: session overlays existing row", () => {
   it("replaces synthetic nullifiers with real session values when usernames match", () => {
     const users = [
       makeUser({ id: 1, username: "alice", role: "citizen" }),
@@ -123,9 +123,9 @@ describe("buildAnonymizedRegistry — branch 2: session overlays existing row", 
     expect(bobRow.loginNullifierHex).toBe("ee".repeat(32));
   });
 
-  it("preserves the SEED ROLE for the matched user — session.role does NOT promote/demote", () => {
+  it("preserves the SEED ROLE for the matched user, session.role does NOT promote/demote", () => {
     // Seed says bob is admin. Session lies and claims bob is a
-    // citizen. The registry is authoritative — bob stays admin.
+    // citizen. The registry is authoritative, bob stays admin.
     // This pins down that the projection cannot be used to
     // smuggle a role change via the session input.
     const users = [makeUser({ id: 1, username: "bob", role: "admin" })];
@@ -142,7 +142,7 @@ describe("buildAnonymizedRegistry — branch 2: session overlays existing row", 
   });
 });
 
-describe("buildAnonymizedRegistry — branch 3: session appends a new row", () => {
+describe("buildAnonymizedRegistry, branch 3: session appends a new row", () => {
   it("appends a new row when the session username is not in the seed list", () => {
     const users = [makeUser({ id: 1, username: "alice", role: "citizen" })];
     const session: IdentitySessionInput = {
@@ -192,7 +192,7 @@ describe("buildAnonymizedRegistry — branch 3: session appends a new row", () =
   });
 });
 
-describe("buildAnonymizedRegistry — id column + previous-binding columns", () => {
+describe("buildAnonymizedRegistry, id column + previous-binding columns", () => {
   it("carries UiUser.id verbatim onto each projected row", () => {
     const users = [
       makeUser({ id: 1, username: "alice", role: "citizen" }),
