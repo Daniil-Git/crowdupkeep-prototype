@@ -226,14 +226,24 @@ const api = {
 
   // Dev-only one-shot admin bypass. Flips the live session to admin
   // AND marks the TOTP gate as already passed in a single synchronous
-  // call so the operator can land on AdminDatabaseView without
-  // running through register → promoteToAdmin → enrol → verify each
-  // demo. Deliberately separate from `promoteToAdmin`: that action
-  // remains the production-shaped authn/authz path and is unchanged.
-  // Never reachable from the UI; only from the browser console.
+  // call, then navigates to /admin so the operator lands directly on
+  // the admin surface without the extra Profile → Admin Dashboard
+  // (Demo) click. Deliberately separate from `promoteToAdmin`: that
+  // action remains the production-shaped authn/authz path and is
+  // unchanged. Never reachable from the UI; only from the browser
+  // console.
+  //
+  // The window.location.assign call is guarded the same way logout()
+  // is: jsdom (the Vitest environment) doesn't implement navigation
+  // and throws on assign — the try/catch keeps the function safe to
+  // exercise in unit tests, and the typeof checks keep it safe in
+  // pure-Node environments.
   devAdmin: () => {
     useAppStore.getState().setRole("admin");
     useAppStore.setState({ adminVerified: true });
+    if (typeof window !== "undefined" && typeof window.location !== "undefined") {
+      try { window.location.assign("/admin"); } catch { /* jsdom: navigation not implemented */ }
+    }
   },
 
   // Hard logout — same as the in-app Logout button, but reachable from
