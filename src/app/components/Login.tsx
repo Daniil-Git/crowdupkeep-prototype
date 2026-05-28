@@ -90,11 +90,11 @@ export function Login() {
           </div>
 
           <div>
-            <Label htmlFor="password">Password / PIN</Label>
+            <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password or PIN"
+              placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1.5"

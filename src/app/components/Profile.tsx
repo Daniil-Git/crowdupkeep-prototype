@@ -243,8 +243,8 @@ export function Profile() {
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <p className="text-sm text-gray-600">
-                  Submitting a new Cypriot ID re-derives your identity
-                  binding. Your login password and access are not changed.
+                  Submitting a new Cypriot ID updates your account identity.
+                  Your login password and access are not changed.
                 </p>
                 {/*
                   The same component the Register flow uses — tabbed
@@ -282,21 +282,24 @@ export function Profile() {
           </Button>
 
           {/*
-            Logout button. Wired to the store's secure logout action:
-            clearStorage() on the persist middleware, identity slice
-            reset to nulls, sessionStorage swept, then a hard
-            window.location.replace('/') so the entire component tree
-            re-mounts (releasing blob URLs and any ephemeral
-            component-local state along the way). The toast is fired
-            on the same tick — the location.replace is async at the
-            browser level so the toast still has time to render before
-            the navigation tears the tree down. We don't call
-            navigate('/') here: that would race with the store's hard
-            navigation and produce a brief flash of an empty layout.
+            Logout button. Wired to the store's session-only logout
+            action: clears isAuthenticated / role / adminVerified, sweeps
+            sessionStorage, then a hard window.location.replace('/') so
+            the entire component tree re-mounts (releasing blob URLs
+            and any ephemeral component-local state along the way). The
+            credential triple (username, loginNullifier, ownershipPublicKey)
+            and derived identity material (identityNullifier, totpSecret)
+            are deliberately PRESERVED so the same device can log back
+            in with username + password without re-running the citizen-ID
+            registration flow — the demo-ergonomics contract documented
+            on the logout action.
+            The toast is fired on the same tick — the location.replace
+            is async at the browser level so the toast still renders
+            before the navigation tears the tree down.
           */}
           <Button
             onClick={() => {
-              toast.success("Logged out — local credentials cleared.");
+              toast.success("Logged out — log back in with your password.");
               logout();
             }}
             variant="outline"
